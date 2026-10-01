@@ -1,0 +1,32 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: swift --version
+      - run: swift test
+      - run: swift build -c release
+      - run: python3 scripts/check-contract.py
+      - run: python3 scripts/check-contract.py --self-test
+      - run: python3 scripts/check-public-content.py --history
+      - run: python3 scripts/check-api-reference.py --self-test
+  linux:
+    runs-on: ubuntu-24.04
+    container: swift:6.2.4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: apt-get update && apt-get install -y zlib1g-dev python3
+      - run: swift test
+      - run: swift build -c release
+      - run: python3 scripts/check-contract.py
+      - run: python3 scripts/check-contract.py --self-test
+      - run: python3 scripts/check-public-content.py --history
+      - run: python3 scripts/check-api-reference.py --self-test

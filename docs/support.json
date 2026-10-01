@@ -1,0 +1,138 @@
+[
+  {
+    "feature": "Body, paragraphs, runs, tabs and breaks",
+    "status": "supported",
+    "tests": [
+      "minimal",
+      "plainTextBreaks"
+    ]
+  },
+  {
+    "feature": "Bold, italic, size, color, East Asian and complex scripts",
+    "status": "supported",
+    "tests": [
+      "formattingAndStyleToggles",
+      "eastAsianAndComplexScriptFormatting",
+      "unknownFormattingStaysRaw"
+    ]
+  },
+  {
+    "feature": "Paragraph formatting and style inheritance",
+    "status": "supported",
+    "tests": [
+      "paragraphPaginationProperties",
+      "directSpacingPreservesInheritedLineRule",
+      "styleCycleIsRejected"
+    ]
+  },
+  {
+    "feature": "Tables, nesting, merges, widths and borders",
+    "status": "supported",
+    "tests": [
+      "tablesMergesAndNestedContent",
+      "libreOfficeProducerParity"
+    ]
+  },
+  {
+    "feature": "Numbering",
+    "status": "supported",
+    "tests": [
+      "numberingDefinitionsAndOverrides",
+      "malformedNumberingIsRejected"
+    ]
+  },
+  {
+    "feature": "Links and bookmarks",
+    "status": "supported",
+    "tests": [
+      "linksAndBookmarks",
+      "externalRelationshipNeverFetches"
+    ]
+  },
+  {
+    "feature": "Fields",
+    "status": "supported",
+    "tests": [
+      "simpleAndComplexFields",
+      "nestedFields",
+      "incompleteFieldWarnsAndKeepsDisplay"
+    ]
+  },
+  {
+    "feature": "Images",
+    "status": "supported",
+    "tests": [
+      "imagesAreLazyAndTyped",
+      "lazyAssetsValidateCRC"
+    ]
+  },
+  {
+    "feature": "Sections, headers and footers",
+    "status": "supported",
+    "tests": [
+      "sectionHeadersInherit",
+      "libreOfficeProducerParity"
+    ]
+  },
+  {
+    "feature": "Footnotes, endnotes and comments",
+    "status": "supported",
+    "tests": [
+      "relatedStoriesAndReferences",
+      "missingNoteAndCommentReferencesWarn"
+    ]
+  },
+  {
+    "feature": "Revisions",
+    "status": "supported",
+    "tests": [
+      "revisionViews",
+      "trackedTableRows"
+    ]
+  },
+  {
+    "feature": "Metadata and DOCM",
+    "status": "supported",
+    "tests": [
+      "sectionsAndMetadata",
+      "macrosRemainOpaque"
+    ]
+  },
+  {
+    "feature": "Strict, Transitional and ZIP64",
+    "status": "supported",
+    "tests": [
+      "minimal",
+      "zip64AndDescriptors",
+      "relocatedMainPart"
+    ]
+  },
+  {
+    "feature": "Content controls, math, shapes, charts, OLE and altChunk",
+    "status": "raw",
+    "tests": [
+      "unknownContentIsRecoverable",
+      "rawXMLKeepsNamespacesAndOrder"
+    ]
+  },
+  {
+    "feature": "Legacy DOC and encrypted documents",
+    "status": "refused",
+    "tests": [
+      "oleContainerIsRefused"
+    ]
+  },
+  {
+    "feature": "ODT and Pages reading",
+    "status": "planned",
+    "tests": [
+      "futureCodecsAreNamed",
+      "iWorkSpreadsheetIsNotPages"
+    ]
+  },
+  {
+    "feature": "Writing, conversion and layout",
+    "status": "planned",
+    "tests": []
+  }
+]

@@ -1,0 +1,14 @@
+SwiftDocuments
+
+Copyright (c) 2026 Shinichi Nambu. MIT License.
+
+The CZlib module map and shim are based on the corresponding SwiftSheets files.
+SwiftSheets: https://github.com/nanbu/SwiftSheets — MIT License,
+Copyright (c) 2026 Shinichi Nambu.
+
+The Word implementation references ECMA-376 and Microsoft's public documentation.
+IWA detection references the investigations linked in docs/format-design.md.
+No third-party Protobuf schemas, registries or implementation code are bundled.
+
+Test documents contain synthetic content. Provenance and regeneration instructions
+are recorded in Tests/SwiftDocumentsTests/Fixtures/README.md.

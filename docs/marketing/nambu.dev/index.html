@@ -1,0 +1,134 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f7f7f2">
+<title>SwiftDocuments — SwiftでWordを読むライブラリ | nambu.dev</title><meta name="description" content="開発中のSwiftライブラリ。WordのDOCX / DOCMを読み、段落・書式・表・画像参照を共通モデルで扱えます。ODTとPagesは設計段階です。"><link rel="canonical" href="https://nambu.dev/swiftdocuments/"><meta property="og:title" content="SwiftDocuments — SwiftでWordを読むライブラリ | nambu.dev"><meta property="og:description" content="開発中のSwiftライブラリ。WordのDOCX / DOCMを読み、段落・書式・表・画像参照を共通モデルで扱えます。ODTとPagesは設計段階です。"><meta property="og:type" content="website"><meta property="og:url" content="https://nambu.dev/swiftdocuments/">
+<style>
+:root{--paper:#f7f7f2;--ink:#20251f;--muted:#646a60;--line:#d9ddd1;--green:#355c37;--lime:#d8f36a;--mono:ui-monospace,SFMono-Regular,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:32px}body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.8;-webkit-font-smoothing:antialiased}a{color:inherit}button{font:inherit}a,button{-webkit-tap-highlight-color:transparent}a:focus-visible,button:focus-visible{outline:3px solid #467434;outline-offset:6px}::selection{background:var(--lime);color:var(--ink)}.wrap{width:min(1160px,calc(100% - 80px));margin:auto}.masthead{height:100px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);gap:20px}.brand{font-size:23px;font-weight:750;letter-spacing:-1px;text-decoration:none}.brand i{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--green);margin-left:4px}.byline,.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.09em}.byline{color:var(--muted)}.eyebrow{color:var(--green);margin:0 0 24px}h1,h2,h3,p{margin-top:0}h1{font-size:clamp(38px,5.2vw,70px);letter-spacing:-.055em;line-height:1.35;font-weight:700}h2{font-size:clamp(27px,3vw,40px);letter-spacing:-.035em;line-height:1.5}h3{letter-spacing:-.025em;line-height:1.5}.muted{color:var(--muted)}.skip{position:absolute;top:-100px;left:20px;background:var(--lime);padding:12px;z-index:10}.skip:focus{top:12px}.footer{border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;padding:32px 0 42px;margin-top:80px;color:var(--muted);font-size:12px}.footer a{text-underline-offset:5px}.btn{display:inline-flex;align-items:center;justify-content:center;gap:30px;background:var(--ink);color:white;text-decoration:none;padding:13px 22px;border-radius:7px;font-size:14px;font-weight:600;border:1px solid var(--ink)}.btn:hover{background:var(--green)}.textlink{font-size:14px;text-underline-offset:6px}.actions{display:flex;align-items:center;flex-wrap:wrap;gap:25px}.section-head{display:flex;align-items:baseline;justify-content:space-between;gap:20px;border-top:1px solid var(--line);padding-top:25px;margin-bottom:30px}.section-head h2{font-size:18px;margin:0}.section-head span{font:12px var(--mono);color:var(--muted)}
+@media(max-width:700px){.wrap{width:calc(100% - 40px)}.masthead{height:76px}.brand{font-size:21px}.byline{font-size:10px;letter-spacing:0}.footer{margin-top:55px}.actions{gap:20px}h1{letter-spacing:-.06em}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important;animation:none!important}}
+
+
+[hidden]{display:none!important}.masthead .textlink{margin-left:auto}.language-switch{display:flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:6px;flex-shrink:0}.language-switch button{border:0;background:none;color:var(--muted);padding:5px 11px;border-radius:3px;font-size:12px;cursor:pointer}.language-switch button[aria-pressed=true]{background:var(--green);color:white}.hero{padding:64px 0 55px;display:grid;grid-template-columns:1.15fr 1fr;gap:65px;align-items:center}.hero h1{font-size:clamp(32px,3.6vw,49px);line-height:1.45}.product-name{font:18px var(--mono);color:var(--green);margin-bottom:24px}.lead{font-size:15px;color:var(--muted);max-width:520px}.development-note{font-size:13px;color:#786244}.hero-art{background:#e8eedc;border-radius:12px;padding:35px;display:grid;place-items:center;min-height:335px}.document-preview{background:#fffefa;border:1px solid #cbd4bd;width:100%;max-width:320px;padding:25px;box-shadow:0 8px 24px #20251f0d}.document-preview small{font:11px var(--mono);color:var(--muted)}.document-preview h3{font-size:22px;margin:18px 0 12px}.document-preview p{font-size:12px;color:var(--muted)}.document-preview table{width:100%;font-size:11px;border-collapse:collapse}.document-preview td{border:1px solid var(--line);padding:7px}.document-preview .structure{font:11px var(--mono);color:var(--green);margin:18px 0 0}.requirements{border-top:1px solid var(--line);border-bottom:1px solid var(--line);display:flex;gap:20px 30px;flex-wrap:wrap;padding:18px 0;color:var(--muted);font-size:12px}.section{padding-top:70px}.section h2{font-size:29px;margin-bottom:22px}.features{display:grid;grid-template-columns:repeat(3,1fr);gap:35px;border-top:1px solid var(--line);padding-top:25px}.features h3{font-size:20px}.features p,.section>p,.setup p{font-size:14px;color:var(--muted)}.code-grid{display:grid;grid-template-columns:1fr 1fr;gap:30px}.code-grid article{min-width:0}.code-grid h3{font-size:18px}.code-grid p{font-size:13px;color:var(--muted)}pre{background:#242c25;color:#e6efd9;padding:23px;border-radius:8px;overflow:auto;font:12px/1.85 var(--mono);margin:0}code{font-family:var(--mono)}.kw{color:#d8f36a}.str{color:#e1c895}.setup{display:grid;grid-template-columns:.85fr 1.15fr;gap:45px}.setup pre{background:#e9eee1;color:#304329}.table-scroll{overflow:auto}.formats{width:100%;border-collapse:collapse;font-size:14px}.formats th,.formats td{padding:18px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.formats th{font-size:12px;font-weight:500;color:var(--muted)}.formats td:first-child{width:140px;font-family:var(--mono);color:var(--green)}.formats td:nth-child(2){width:160px}.fineprint{font-size:13px;color:var(--muted);margin:20px 0}.resources{display:flex;flex-wrap:wrap;gap:25px;font-size:14px}.resources a{text-underline-offset:5px}.closing{border-top:1px solid var(--line);padding-top:35px;margin-top:65px}
+@media(max-width:850px){.hero{gap:35px}.hero-art{padding:20px}.hero h1{font-size:34px}.code-grid{grid-template-columns:1fr}.setup{grid-template-columns:1fr;gap:20px}}
+@media(max-width:600px){.masthead{height:auto;min-height:76px;flex-wrap:wrap;padding:17px 0;gap:12px}.language-switch{margin-left:auto}.masthead .textlink{order:3;flex-basis:100%;margin-left:0;font-size:12px}.hero{grid-template-columns:1fr;padding:40px 0;gap:28px}.hero h1{font-size:33px}.hero-art{min-height:300px}.section{padding-top:48px}.section h2{font-size:26px}.features{grid-template-columns:1fr;gap:18px}.features h3{margin-bottom:8px}.requirements{gap:12px 20px}.formats{min-width:520px;font-size:12px}pre{font-size:11px;padding:18px}}
+</style></head><body>
+<a class="skip" href="#main" data-ja="本文へ" data-en="Skip to content">本文へ</a>
+<div class="wrap"><header class="masthead"><a class="brand" href="/">nambu.dev<i></i></a><a class="textlink" href="https://github.com/nanbu/SwiftDocuments">GitHub ↗</a><div class="language-switch" role="group" aria-label="Language / 言語"><button type="button" data-set-lang="ja" aria-pressed="true" disabled>日本語</button><button type="button" data-set-lang="en" aria-pressed="false" disabled>English</button></div></header><main id="main"><section class="hero"><div><p class="product-name">SwiftDocuments</p>
+<h1  data-ja="Swiftで&lt;br&gt;Wordの文書を読む" data-en="Read Word documents&lt;br&gt;in Swift">Swiftで<br>Wordの文書を読む</h1>
+<p class="lead" data-ja="Word の DOCX / DOCM を読み、文章・書式・表などを Swift の値型で扱うライブラリです。SwiftSheets と同じように、ファイル形式の違いを共通のモデルで扱うことを目指しています。" data-en="Read Word DOCX / DOCM files and work with their text, formatting and tables as Swift value types. Like SwiftSheets, the library aims to handle different file formats through a common model.">Word の DOCX / DOCM を読み、文章・書式・表などを Swift の値型で扱うライブラリです。SwiftSheets と同じように、ファイル形式の違いを共通のモデルで扱うことを目指しています。</p>
+<p class="development-note" data-ja="開発中・未リリースです。API は今後変更される可能性があります。" data-en="In development. No release yet; the API may change.">開発中・未リリースです。API は今後変更される可能性があります。</p>
+<div class="actions">
+<a class="btn" href="#examples" data-ja="コードを見る ↓" data-en="See the code ↓">コードを見る ↓</a>
+<a class="textlink" href="https://nanbu.github.io/SwiftDocuments/" data-ja="API リファレンス ↗" data-en="API reference ↗">API リファレンス ↗</a>
+</div></div><div class="hero-art" aria-hidden="true"><div class="document-preview"><small>report.docx</small>
+<h3  data-ja="月次レポート" data-en="Monthly report">月次レポート</h3>
+<p  data-ja="見出しと本文を、段落として読み込む。" data-en="Read headings and body text as paragraphs.">見出しと本文を、段落として読み込む。</p>
+<table><tr>
+<td  data-ja="項目" data-en="Item">項目</td>
+<td  data-ja="内容" data-en="Details">内容</td>
+</tr><tr>
+<td  data-ja="文書" data-en="Document">文書</td>
+<td  data-ja="段落・表・書式" data-en="Paragraphs, tables, styles">段落・表・書式</td>
+</tr></table><p class="structure">Document → Block → Inline</p></div></div></section><div class="requirements">
+<span  data-ja="オープンソース / MIT" data-en="Open source / MIT">オープンソース / MIT</span>
+<span>Swift 6.2+</span><span>macOS 14+ / iOS 17+</span>
+<span  data-ja="外部Swiftパッケージ依存なし" data-en="No external Swift package dependencies">外部Swiftパッケージ依存なし</span>
+</div><section class="section"><h2>
+<span  data-ja="Wordの読み取りから" data-en="Starting with Word reading">Wordの読み取りから</span>
+</h2><div class="features">
+<article>
+<h3  data-ja="文書の構造を取り出す" data-en="Extract document structure">文書の構造を取り出す</h3>
+<p  data-ja="段落、文字列と書式、表や結合セル、ハイパーリンク、画像への参照を取得できます。画像データは必要になった時に読み出します。" data-en="Read paragraphs, text formatting, tables and merged cells, hyperlinks and image references. Load image data when needed.">段落、文字列と書式、表や結合セル、ハイパーリンク、画像への参照を取得できます。画像データは必要になった時に読み出します。</p>
+</article>
+<article>
+<h3  data-ja="本文以外も確認する" data-en="Look beyond the main text">本文以外も確認する</h3>
+<p  data-ja="ヘッダー・フッター、脚注・文末脚注、コメント、変更履歴を読み取ります。未対応の内容や参照の問題は警告で確認できます。" data-en="Read headers, footers, footnotes, endnotes, comments and revisions. Warnings identify unsupported content and reference issues.">ヘッダー・フッター、脚注・文末脚注、コメント、変更履歴を読み取ります。未対応の内容や参照の問題は警告で確認できます。</p>
+</article>
+<article>
+<h3  data-ja="用途に合わせて読み込む" data-en="Choose how to read">用途に合わせて読み込む</h3>
+<p  data-ja="read は文書全体、inspect はパッケージ概要を読みます。scan は本文のブロックを順に処理し、処理済みの本文ブロックを保持しません。" data-en="Use read for a full document and inspect for package information. Use scan to process main-body blocks in order without retaining completed body blocks.">read は文書全体、inspect はパッケージ概要を読みます。scan は本文のブロックを順に処理し、処理済みの本文ブロックを保持しません。</p>
+</article>
+</div>
+<p class="fineprint" data-ja="scan でも入力ファイル、展開した本文 XML、関連する文書情報はメモリに保持します。メモリ使用量が一定になる方式ではありません。" data-en="scan still keeps the input file, expanded main XML and related document information in memory. Its memory use is not constant.">scan でも入力ファイル、展開した本文 XML、関連する文書情報はメモリに保持します。メモリ使用量が一定になる方式ではありません。</p>
+</section><section class="section" id="examples">
+<h2  data-ja="短いコードで文章を取り出す" data-en="Extract text with a few lines">短いコードで文章を取り出す</h2>
+<div class="code-grid"><article>
+<h3  data-ja="文書を読み込む" data-en="Read a document">文書を読み込む</h3>
+<pre tabindex="0"><code><span class="kw">import</span> Foundation
+<span class="kw">import</span> SwiftDocuments
+
+<span class="kw">let</span> url = URL(fileURLWithPath: <span class="str">"report.docx"</span>)
+<span class="kw">let</span> result = <span class="kw">try</span> Document.read(contentsOf: url)
+print(result.document.plainText)
+
+<span class="kw">for</span> warning <span class="kw">in</span> result.warnings {
+    print(warning.message)
+}</code></pre></article><article>
+<h3  data-ja="本文をブロックごとに処理する" data-en="Process the body one block at a time">本文をブロックごとに処理する</h3>
+<pre tabindex="0"><code><span class="kw">import</span> Foundation
+<span class="kw">import</span> SwiftDocuments
+
+<span class="kw">let</span> url = URL(fileURLWithPath: <span class="str">"report.docx"</span>)
+<span class="kw">let</span> result = <span class="kw">try</span> Document.scan(contentsOf: url) { block <span class="kw">in</span>
+    print(block.plainText)
+}
+print(result.blocksRead)</code></pre></article></div>
+<p class="fineprint" data-ja="上記はローカルの report.docx を読む例です。ブラウザ内で Swift は実行しません。" data-en="These examples read a local report.docx file. Swift does not run in the browser.">上記はローカルの report.docx を読む例です。ブラウザ内で Swift は実行しません。</p>
+</section><section class="section" id="start">
+<h2  data-ja="Swift Package Managerで導入" data-en="Install with Swift Package Manager">Swift Package Managerで導入</h2>
+<div class="setup"><div>
+<p  data-ja="公開リポジトリの main ブランチを指定します。リリース版はまだ用意していません。" data-en="Use the main branch of the public repository. A versioned release is not available yet.">公開リポジトリの main ブランチを指定します。リリース版はまだ用意していません。</p>
+<p  data-ja="Package.swift の dependencies とターゲットの dependencies に追加してください。" data-en="Add the package to dependencies and its product to your target dependencies.">Package.swift の dependencies とターゲットの dependencies に追加してください。</p>
+</div><pre tabindex="0"><code>// Package.swift
+dependencies: [
+    .package(
+        url: "https://github.com/nanbu/SwiftDocuments.git",
+        branch: "main"
+    )
+]
+
+// Target dependencies
+.product(name: "SwiftDocuments", package: "SwiftDocuments")</code></pre></div></section><section class="section">
+<h2  data-ja="対応形式と開発の範囲" data-en="Formats and development scope">対応形式と開発の範囲</h2>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Format support / 形式ごとの対応"><table class="formats"><thead><tr>
+<th scope="col" data-ja="形式" data-en="Format">形式</th>
+<th scope="col" data-ja="状態" data-en="Status">状態</th>
+<th scope="col" data-ja="内容" data-en="Details">内容</th>
+</tr></thead><tbody>
+<tr><td>DOCX / DOCM</td>
+<td  data-ja="読取実装あり" data-en="Reader implemented">読取実装あり</td>
+<td  data-ja="Word の文書形式です。DOCM 内のマクロは実行しません。" data-en="Word document formats. Macros in DOCM files are never executed.">Word の文書形式です。DOCM 内のマクロは実行しません。</td>
+</tr>
+<tr><td>ODT</td>
+<td  data-ja="設計・形式判定のみ" data-en="Design and detection only">設計・形式判定のみ</td>
+<td  data-ja="LibreOffice Writer などが使う文書形式です。読み取り実装は今後追加する予定です。" data-en="A document format used by LibreOffice Writer and other editors. Reading is planned.">LibreOffice Writer などが使う文書形式です。読み取り実装は今後追加する予定です。</td>
+</tr>
+<tr><td>Pages</td>
+<td  data-ja="設計・形式判定のみ" data-en="Design and detection only">設計・形式判定のみ</td>
+<td  data-ja="Apple Pages の文書形式です。読み取り実装は今後追加する予定です。" data-en="Apple Pages document format. Reading is planned.">Apple Pages の文書形式です。読み取り実装は今後追加する予定です。</td>
+</tr>
+</tbody></table></div>
+<p class="fineprint" data-ja="現在は読み取りに取り組んでいます。文書の書き込み、形式変換、ページの描画やレイアウト、旧 Word の .doc、暗号化文書は未対応です。" data-en="Current work focuses on reading. Writing, format conversion, page rendering and layout, legacy .doc files and encrypted documents are not supported.">現在は読み取りに取り組んでいます。文書の書き込み、形式変換、ページの描画やレイアウト、旧 Word の .doc、暗号化文書は未対応です。</p>
+</section><section class="closing">
+<h2  data-ja="コードと仕様を公開しています" data-en="Explore the code and specifications">コードと仕様を公開しています</h2>
+<div class="resources"><a href="https://github.com/nanbu/SwiftDocuments">GitHub ↗</a>
+<a href="https://nanbu.github.io/SwiftDocuments/" data-ja="API リファレンス ↗" data-en="API reference ↗">API リファレンス ↗</a>
+<a href="https://github.com/nanbu/SwiftDocuments#support" data-ja="詳しい対応範囲 ↗" data-en="Detailed support ↗">詳しい対応範囲 ↗</a>
+<a href="/swiftsheets/" data-ja="SwiftSheets ↗" data-en="SwiftSheets ↗">SwiftSheets ↗</a>
+</div></section></main><footer class="footer"><span>© 2026 Shinichi Nambu</span>
+<a href="/" data-ja="製品一覧に戻る ↗" data-en="Browse all products ↗">製品一覧に戻る ↗</a>
+</footer></div>
+<script>
+(function(){
+'use strict';
+const STORAGE_KEY = 'swiftdocuments-lang';
+const metadata = {"ja": {"title": "SwiftDocuments — SwiftでWordを読むライブラリ | nambu.dev", "description": "開発中のSwiftライブラリ。WordのDOCX / DOCMを読み、段落・書式・表・画像参照を共通モデルで扱えます。ODTとPagesは設計段階です。"}, "en": {"title": "SwiftDocuments — Read Word documents in Swift | nambu.dev", "description": "A Swift library in development. Read Word DOCX and DOCM into a common model of paragraphs, formatting, tables and image references. ODT and Pages readers are planned."}};
+function detectLang(){for(const value of navigator.languages||[navigator.language||'en']){const language=value.toLowerCase();if(language.startsWith('ja'))return 'ja';if(language.startsWith('en'))return 'en';}return 'en';}
+function initialLang(){try{const saved=localStorage.getItem(STORAGE_KEY);if(saved==='ja'||saved==='en')return saved;}catch{}return detectLang();}
+function setLang(language,persist){document.documentElement.lang=language;document.title=metadata[language].title;document.querySelector('meta[name="description"]').content=metadata[language].description;document.querySelector('meta[property="og:title"]').content=metadata[language].title;document.querySelector('meta[property="og:description"]').content=metadata[language].description;
+document.querySelectorAll('[data-ja][data-en]').forEach(element=>{element.innerHTML=element.getAttribute('data-'+language);});
+document.querySelectorAll('[data-set-lang]').forEach(button=>{button.setAttribute('aria-pressed',String(button.getAttribute('data-set-lang')===language));button.disabled=false;});
+if(persist){try{localStorage.setItem(STORAGE_KEY,language);}catch{}}}
+document.querySelectorAll('[data-set-lang]').forEach(button=>button.addEventListener('click',()=>setLang(button.getAttribute('data-set-lang'),true)));
+setLang(initialLang(),false);
+})();
+</script></body></html>

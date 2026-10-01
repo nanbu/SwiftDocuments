@@ -1,0 +1,23 @@
+{
+  "paragraphs": [
+    "SwiftDocuments 検証",
+    "日本語と emoji 📄 太字 / 斜体",
+    "項目1",
+    "項目2",
+    ""
+  ],
+  "tables": [
+    [
+      [
+        "項目",
+        "値"
+      ],
+      [
+        "売上",
+        "1,234"
+      ]
+    ]
+  ],
+  "header": "Producer header",
+  "footer": "Producer footer"
+}
