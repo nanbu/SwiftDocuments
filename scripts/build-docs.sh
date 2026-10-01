@@ -4,19 +4,37 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 output="${1:-.build/documentation}"
 cmp docs/cookbook.md Sources/SwiftDocuments/SwiftDocuments.docc/Cookbook.md
-# Swift 6.4 uses a new symbolgraph path. Extract into a fresh scratch directory
-# and read its emitted location instead of accidentally using an older build.
-log="$(mktemp)"
-trap 'rm -f "$log"' EXIT
-# SwiftPM 6.3 may also extract a graph for its synthesized test-runner module.
-# Build those modules first so extraction succeeds on a fresh checkout as well.
-swift build --scratch-path .build/docc-symbols --build-tests
-swift package --scratch-path .build/docc-symbols dump-symbol-graph 2>&1 | tee "$log"
-graph_path="$(sed -n 's/^Files written to //p' "$log" | tail -1)"
-if [[ -z "$graph_path" || ! -f "$graph_path/SwiftDocuments.symbols.json" ]]; then
-    echo 'Public umbrella symbol graph was not produced' >&2
+# Query the current product path, then extract only library modules. Some SwiftPM
+# versions attempt extraction for an unbuilt synthetic test runner, and older
+# extractors omit re-exports unless explicitly allowed (SwiftPM issue #9101).
+swift build --target SwiftDocuments --scratch-path .build/docc-symbols
+binary_path="$(swift build --scratch-path .build/docc-symbols --show-bin-path)"
+module_path="$binary_path"
+if [[ -e "$binary_path/Modules/SwiftDocuments.swiftmodule" ]]; then
+    module_path="$binary_path/Modules"
+fi
+if [[ ! -e "$module_path/SwiftDocuments.swiftmodule" ]]; then
+    echo 'The current public Swift module was not produced' >&2
     exit 1
 fi
+graph_path="$PWD/.build/docc-library-graphs"
+mkdir -p "$graph_path"
+# Removing only prior generated JSON prevents stale extraction output from
+# satisfying the reference checks after a toolchain change.
+find "$graph_path" -name '*.symbols.json' -delete
+sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
+for module in DocumentCore DocumentDOCX SwiftDocuments; do
+    xcrun swift-symbolgraph-extract \
+        -module-name "$module" \
+        -target "$(uname -m)-apple-macosx14.0" \
+        -sdk "$sdk_path" \
+        -I "$module_path" \
+        -Xcc "-fmodule-map-file=$PWD/Sources/CZlib/module.modulemap" \
+        -experimental-allowed-reexported-modules=DocumentCore,DocumentDOCX \
+        -minimum-access-level public \
+        -omit-extension-block-symbols \
+        -output-dir "$graph_path"
+done
 mkdir -p .build/docc-public-graphs
 python3 - "$graph_path" <<'PY'
 import json, sys
