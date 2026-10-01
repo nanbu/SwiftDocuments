@@ -26,6 +26,10 @@ import SwiftDocuments
     @Test func malformedXMLThrows() {
         #expect(throws: DocumentError.self) { try Document.read(makeDocument("<w:p><w:r>")) }
     }
+    @Test(arguments: ["<root><child></root>", "<root>", "<root/><other/>", "<root a='1' a='2'/>", "<root>&missing;</root>"])
+    func parserRecoveryIsRejected(_ xml: String) {
+        #expect(throws: DocumentError.self) { try XMLTree.parse(Data(xml.utf8), part: "malformed", limits: .init()) }
+    }
     @Test func excessiveDepthThrows() {
         let body = String(repeating: "<x:wrapper>", count: 20) + String(repeating: "</x:wrapper>", count: 20)
         #expect(throws: DocumentError.self) { try Document.read(makeDocument(body), options: ReadOptions(limits: PackageLimits(maxXMLDepth: 10))) }

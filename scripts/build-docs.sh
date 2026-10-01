@@ -8,6 +8,9 @@ cmp docs/cookbook.md Sources/SwiftDocuments/SwiftDocuments.docc/Cookbook.md
 # and read its emitted location instead of accidentally using an older build.
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
+# SwiftPM 6.3 may also extract a graph for its synthesized test-runner module.
+# Build those modules first so extraction succeeds on a fresh checkout as well.
+swift build --scratch-path .build/docc-symbols --build-tests
 swift package --scratch-path .build/docc-symbols dump-symbol-graph 2>&1 | tee "$log"
 graph_path="$(sed -n 's/^Files written to //p' "$log" | tail -1)"
 if [[ -z "$graph_path" || ! -f "$graph_path/SwiftDocuments.symbols.json" ]]; then

@@ -64,7 +64,8 @@ package enum XMLTree {
         parser.shouldResolveExternalEntities = false; parser.delegate = delegate
         let success = parser.parse()
         if let error = delegate.failure { throw error }
-        guard success, let root = delegate.root else { throw DocumentError.invalidXML(part: part, detail: parser.parserError?.localizedDescription ?? "empty XML") }
+        guard success, parser.parserError == nil, delegate.completed, delegate.stack.isEmpty,
+              let root = delegate.root else { throw DocumentError.invalidXML(part: part, detail: parser.parserError?.localizedDescription ?? "incomplete XML") }
         return root
     }
 }
@@ -76,8 +77,15 @@ private final class TreeDelegate: NSObject, XMLParserDelegate {
     var stack: [MarkupNode] = []
     var prefixes: [String: [String]] = ["xml": ["http://www.w3.org/XML/1998/namespace"]]
     var failure: (any Error)?
+    var completed = false
     var nodes = 0
     init(part: String, limits: PackageLimits, callback: ((MarkupNode) throws -> Void)?) { self.part = part; self.limits = limits; self.callback = callback }
+    func parser(_ parser: XMLParser, parseErrorOccurred parseError: any Error) {
+        // Linux Foundation can return true after reporting a recoverable libxml error.
+        // Preserve an earlier callback or explicit limit failure when aborting parsing.
+        if failure == nil { failure = DocumentError.invalidXML(part: part, detail: parseError.localizedDescription) }
+    }
+    func parserDidEndDocument(_ parser: XMLParser) { completed = true }
     func parser(_ parser: XMLParser, didStartMappingPrefix prefix: String, toURI namespaceURI: String) { prefixes[prefix, default: []].append(namespaceURI) }
     func parser(_ parser: XMLParser, didEndMappingPrefix prefix: String) { _ = prefixes[prefix]?.popLast() }
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String]) {
@@ -92,7 +100,11 @@ private final class TreeDelegate: NSObject, XMLParserDelegate {
             } else { attrs[key] = value }
         }
         let node = MarkupNode(name: elementName, namespace: namespaceURI ?? "", attributes: attrs)
-        if let parent = stack.last { parent.content.append(.node(node)) } else { root = node }
+        if let parent = stack.last { parent.content.append(.node(node)) }
+        else {
+            guard root == nil else { failure = DocumentError.invalidXML(part: part, detail: "multiple roots"); parser.abortParsing(); return }
+            root = node
+        }
         stack.append(node)
     }
     func parser(_ parser: XMLParser, foundCharacters string: String) {
@@ -105,6 +117,10 @@ private final class TreeDelegate: NSObject, XMLParserDelegate {
     func parser(_ parser: XMLParser, foundCDATA CDATABlock: Data) { self.parser(parser, foundCharacters: String(decoding: CDATABlock, as: UTF8.self)) }
     func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
         guard failure == nil, let node = stack.popLast() else { return }
+        guard node.name == elementName, node.namespace == (namespaceURI ?? "") else {
+            failure = DocumentError.invalidXML(part: part, detail: "mismatched element boundary")
+            parser.abortParsing(); return
+        }
         if stack.count == 2, let parent = stack.last, parent.isWord, parent.name == "body", stack.first?.isWord == true, stack.first?.name == "document", let callback {
             do { try callback(node); parent.content.removeLast() }
             catch { failure = error; parser.abortParsing() }

@@ -25,6 +25,8 @@ Identify content through MIME, content types and root relationships; do not trus
 
 Check CRCs on inflation, declared lengths, duplicate names, local headers, overlapping entry ranges, unsafe paths and multi-disk ZIPs. Defaults are 10,000 parts, 512 MiB expanded total, 128 MiB per part, depth 128 and 2,000,000 XML nodes. Violations throw. Reject DTD / entity declarations, including UTF-16 / UTF-32 inputs. External relationships remain URLs and are never fetched. Normalize internal relationship paths within the OPC package; traversal, missing targets and duplicate IDs throw.
 
+A Foundation parser can report an XML error while its Boolean return value indicates success, particularly on Linux. Reject reported parser / delegate errors, mismatched element boundaries, multiple roots and incomplete documents; never turn recovery into a successful document. Callback errors and explicit limit errors retain priority.
+
 ## Word contract
 
 Read body order, paragraphs, formatted runs, tabs, breaks and tables (nested tables, gridSpan, vMerge, widths, borders and cell properties). Frequent run / paragraph properties have typed fields; raw XML supplements uninterpreted properties. Resolve style inheritance and Word style toggles. Preserve numbering abstract definitions, instances and level overrides; paragraphs carry numbering IDs / levels, without computed display numbers.
