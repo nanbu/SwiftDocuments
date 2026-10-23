@@ -1,5 +1,5 @@
 import Foundation
-import CZlib
+import CDocumentZlib
 
 /// Immutable, memory-backed OPC ZIP. No files are extracted to disk.
 package struct PackageArchive: Sendable {
@@ -16,6 +16,7 @@ package struct PackageArchive: Sendable {
     package let paths: [String]
 
     package init(_ data: Data, limits: PackageLimits = .init()) throws {
+        try Task.checkCancellation()
         guard limits.maxEntries > 0, limits.maxExpandedBytes >= 0, limits.maxPartBytes >= 0 else {
             throw DocumentError.limitExceeded("limits must be nonnegative")
         }
@@ -53,6 +54,7 @@ package struct PackageArchive: Sendable {
             var p = offset, total = 0
             var entries: [String: Entry] = [:], paths: [String] = [], ranges: [Range<Int>] = []
             for _ in 0..<count {
+                try Task.checkCancellation()
                 guard contains(p, 46), p + 46 <= directoryEnd, u32(p) == 0x02014b50 else { throw fail("invalid ZIP directory entry") }
                 let flags = u16(p + 8), method = u16(p + 10), crc = u32(p + 16)
                 guard flags & 0x0041 == 0 else { throw DocumentError.unsupportedContainer("encrypted ZIP") }
@@ -124,10 +126,12 @@ package struct PackageArchive: Sendable {
             for i in sorted.indices.dropFirst() where sorted[i].lowerBound < sorted[i - 1].upperBound { throw fail("overlapping ZIP entries") }
             return (entries, paths)
         }
+        try Task.checkCancellation()
         entries = parsed.0; paths = parsed.1
     }
 
     package func read(_ path: String) throws -> Data {
+        try Task.checkCancellation()
         guard let entry = entries[path] else { throw DocumentError.missingPart(path) }
         let output: Data
         if entry.method == 0 { output = data.subdata(in: entry.payload) }
@@ -137,18 +141,32 @@ package struct PackageArchive: Sendable {
                 guard inflateInit2_(&stream, -MAX_WBITS, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size)) == Z_OK else { throw DocumentError.corruptedPackage("inflate initialization") }
                 defer { inflateEnd(&stream) }
                 var expanded = Data(count: entry.expandedSize + 1)
-                let status: Int32 = expanded.withUnsafeMutableBytes { dst in
+                let status: Int32 = try expanded.withUnsafeMutableBytes { dst in
                     stream.next_in = UnsafeMutablePointer(mutating: raw.baseAddress!.advanced(by: entry.payload.lowerBound).assumingMemoryBound(to: UInt8.self))
                     stream.avail_in = uInt(entry.compressedSize)
-                    stream.next_out = dst.baseAddress!.assumingMemoryBound(to: UInt8.self)
-                    stream.avail_out = uInt(dst.count)
-                    return inflate(&stream, Z_FINISH)
+                    var status = Int32(Z_OK)
+                    while status == Z_OK && Int(stream.total_out) < dst.count {
+                        try Task.checkCancellation()
+                        let offset = Int(stream.total_out)
+                        stream.next_out = dst.baseAddress!.advanced(by: offset).assumingMemoryBound(to: UInt8.self)
+                        stream.avail_out = uInt(min(64 << 10, dst.count - offset))
+                        status = inflate(&stream, Z_NO_FLUSH)
+                    }
+                    return status
                 }
                 guard status == Z_STREAM_END, stream.total_out == entry.expandedSize, stream.total_in == entry.compressedSize else { throw DocumentError.corruptedPackage("deflate length mismatch in \(path)") }
                 expanded.removeLast(); return expanded
             }
         }
-        let checksum = output.withUnsafeBytes { crc32(0, $0.baseAddress?.assumingMemoryBound(to: UInt8.self), uInt($0.count)) }
+        let checksum = try output.withUnsafeBytes { raw in
+            var checksum = crc32(0, nil, 0)
+            for offset in stride(from: 0, to: raw.count, by: 64 << 10) {
+                try Task.checkCancellation()
+                checksum = crc32(checksum, raw.baseAddress!.advanced(by: offset).assumingMemoryBound(to: UInt8.self), uInt(min(64 << 10, raw.count - offset)))
+            }
+            return checksum
+        }
+        try Task.checkCancellation()
         guard UInt32(checksum) == entry.crc else { throw DocumentError.corruptedPackage("CRC mismatch in \(path)") }
         return output
     }

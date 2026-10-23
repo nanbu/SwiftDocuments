@@ -4,7 +4,7 @@ import SwiftDocuments
 do {
     let args = Array(CommandLine.arguments.dropFirst())
     guard args.count == 2, ["text", "inspect", "scan", "read"].contains(args[0]) else {
-        print("使い方: swiftdoc text|inspect|scan|read 文書.docx")
+        print("Usage: swiftdoc text|inspect|scan|read document.docx")
         exit(2)
     }
     let url = URL(fileURLWithPath: args[1])
@@ -17,7 +17,7 @@ do {
     case "text":
         let result = try Document.read(contentsOf: url)
         print(result.document.plainText)
-        for warning in result.warnings { FileHandle.standardError.write(Data("警告: \(warning.part) / \(warning.element) (\(warning.count)): \(warning.message)\n".utf8)) }
+        for warning in result.warnings { FileHandle.standardError.write(Data("Warning: \(warning.part) / \(warning.element) (\(warning.count)): \(warning.message)\n".utf8)) }
     case "scan":
         var characters = 0
         let result = try Document.scan(contentsOf: url, options: ReadOptions(includeRelatedStories: false)) { characters += $0.plainText.count }

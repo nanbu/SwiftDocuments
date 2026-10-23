@@ -4,7 +4,7 @@ Read Word documents through a format-neutral, Sendable value model.
 
 ## Overview
 
-SwiftDocuments is in development. It reads DOCX and DOCM with no external Swift package dependencies. ODT and Pages currently have format detection and an extension design, but no reading codec. Writing, conversion, decryption and layout are not implemented. APIs may change before a stable release.
+SwiftDocuments 1.0 provides a reading API governed by semantic versioning. It reads DOCX and DOCM with no external Swift package dependencies. ODT and modern Pages have partial reading codecs: ODF text/styles/tables/images/related stories, and Pages IWA body text/basic styles/referenced headers and footers, anchored tables and lazy inline images. Positioned objects and advanced table/image properties remain original IWA data with warnings. A fictional DOCX import/save fixture is verified with Pages Creator Studio 15.4; this does not establish support for every native Pages feature. Writing, conversion, decryption and layout are not implemented.
 
 ```swift
 import Foundation
@@ -15,7 +15,7 @@ print(result.document.plainText)
 print(result.warnings)
 ```
 
-The umbrella re-exports `DocumentCore` and `DocumentDOCX`. Select only Word through `CodecSet([.docx, .docm])` when linking those products directly. Read operations are synchronous; the caller selects the task or thread. Unsupported content is recoverable through warnings, raw XML and original package parts.
+The umbrella re-exports `DocumentCore`, `DocumentDOCX`, `DocumentODT` and `DocumentPages`, registering `.docx`, `.docm`, `.odt` and `.pages`. Select only Word through `CodecSet([.docx, .docm])` when linking those products directly. Read / inspect / asset offer both synchronous and async methods. Async work runs on the generic executor with cooperative cancellation. Unsupported content is recoverable through warnings, raw XML and original package parts.
 
 See <doc:Reading> for read / inspect / scan semantics and <doc:Cookbook> for recipes. The [support contract](https://github.com/nanbu/SwiftDocuments#support) states precisely what the reader interprets.
 
@@ -42,6 +42,8 @@ See <doc:Reading> for read / inspect / scan semantics and <doc:Cookbook> for rec
 - ``BreakKind``
 - ``Hyperlink``
 - ``Field``
+- ``FieldDefinition``
+- ``FieldFragment``
 - ``DocumentImage``
 - ``NoteReference``
 - ``Bookmark``
@@ -49,10 +51,37 @@ See <doc:Reading> for read / inspect / scan semantics and <doc:Cookbook> for rec
 - ``Revision``
 - ``UnsupportedContent``
 
+### Drawings, equations and source data
+
+- ``DocumentDrawing``
+- ``DrawingNode``
+- ``DrawingTransform``
+- ``DrawingPlacement``
+- ``DrawingGeometry``
+- ``GeometryPath``
+- ``Equation``
+- ``EquationNode``
+- ``Chart``
+- ``ChartGroup``
+- ``ChartSeries``
+- ``ChartData``
+- ``ChartPoint``
+- ``ChartAxis``
+- ``PartReference``
+- ``SourceXMLNode``
+- ``SourceXMLReadResult``
+- ``RubyText``
+- ``SymbolCharacter``
+- ``DocumentFont``
+- ``DocumentTheme``
+
 ### Formatting and lists
 
 - ``TextFormatting``
 - ``ParagraphFormatting``
+- ``FormattingChange``
+- ``TextFormattingChange``
+- ``ParagraphFormattingChange``
 - ``ParagraphAlignment``
 - ``LineSpacingRule``
 - ``TextVerticalAlignment``
@@ -64,8 +93,29 @@ See <doc:Reading> for read / inspect / scan semantics and <doc:Cookbook> for rec
 ### Tables and related stories
 
 - ``Table``
+- ``TableBorder``
+- ``TableBorderEdge``
+- ``TableCellEdge``
+- ``TableAlignment``
+- ``TableLayout``
 - ``TableRow``
 - ``TableCell``
+- ``TableFormatting``
+- ``TableRowFormatting``
+- ``TableCellFormatting``
+- ``TableRowHeightRule``
+- ``TableColumn``
+- ``TableColumnChange``
+- ``TableFormattingChange``
+- ``TableRowFormattingChange``
+- ``TableCellFormattingChange``
+- ``CellMergeChange``
+- ``TableWidth``
+- ``ContentControl``
+- ``ContentControlDescriptor``
+- ``ContentControlRange``
+- ``ContentBinding``
+- ``ContentControlItem``
 - ``VerticalMerge``
 - ``Story``
 - ``StoryKind``
@@ -80,6 +130,8 @@ See <doc:Reading> for read / inspect / scan semantics and <doc:Cookbook> for rec
 - ``Codec``
 - ``DocumentCodec``
 - ``DOCXCodec``
+- ``ODTCodec``
+- ``PagesCodec``
 
 ### Guides
 

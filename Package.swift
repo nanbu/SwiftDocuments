@@ -7,14 +7,18 @@ let package = Package(
     products: [
         .library(name: "DocumentCore", targets: ["DocumentCore"]),
         .library(name: "DocumentDOCX", targets: ["DocumentDOCX"]),
+        .library(name: "DocumentODT", targets: ["DocumentODT"]),
+        .library(name: "DocumentPages", targets: ["DocumentPages"]),
         .library(name: "SwiftDocuments", targets: ["SwiftDocuments"]),
         .executable(name: "swiftdoc", targets: ["swiftdoc"])
     ],
     targets: [
-        .systemLibrary(name: "CZlib", pkgConfig: "zlib", providers: [.apt(["zlib1g-dev"]), .brew(["zlib"])]),
-        .target(name: "DocumentCore", dependencies: ["CZlib"]),
-        .target(name: "DocumentDOCX", dependencies: ["DocumentCore"]),
-        .target(name: "SwiftDocuments", dependencies: ["DocumentCore", "DocumentDOCX"]),
+        .systemLibrary(name: "CDocumentZlib", pkgConfig: "zlib", providers: [.apt(["zlib1g-dev"]), .brew(["zlib"])]),
+        .target(name: "DocumentCore", dependencies: ["CDocumentZlib"]),
+        .target(name: "DocumentDOCX", dependencies: ["DocumentCore"], resources: [.copy("Resources")]),
+        .target(name: "DocumentODT", dependencies: ["DocumentCore"]),
+        .target(name: "DocumentPages", dependencies: ["DocumentCore"]),
+        .target(name: "SwiftDocuments", dependencies: ["DocumentCore", "DocumentDOCX", "DocumentODT", "DocumentPages"]),
         .executableTarget(name: "swiftdoc", dependencies: ["SwiftDocuments"]),
         .testTarget(name: "SwiftDocumentsTests", dependencies: ["SwiftDocuments"], resources: [.copy("Fixtures")]),
         .testTarget(name: "PartialLinkTests", dependencies: ["DocumentCore", "DocumentDOCX"])

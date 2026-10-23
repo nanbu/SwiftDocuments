@@ -1,0 +1,2 @@
+# Preserve the upstream reference table and its copyright notice verbatim.
+docs/reference/symbol-font-fallback/data/adobe-symbol.txt -whitespace

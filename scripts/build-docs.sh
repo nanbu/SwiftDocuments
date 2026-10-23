@@ -23,14 +23,14 @@ mkdir -p "$graph_path"
 # satisfying the reference checks after a toolchain change.
 find "$graph_path" -name '*.symbols.json' -delete
 sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
-for module in DocumentCore DocumentDOCX SwiftDocuments; do
+for module in DocumentCore DocumentDOCX DocumentODT DocumentPages SwiftDocuments; do
     xcrun swift-symbolgraph-extract \
         -module-name "$module" \
         -target "$(uname -m)-apple-macosx14.0" \
         -sdk "$sdk_path" \
         -I "$module_path" \
-        -Xcc "-fmodule-map-file=$PWD/Sources/CZlib/module.modulemap" \
-        -experimental-allowed-reexported-modules=DocumentCore,DocumentDOCX \
+        -Xcc "-fmodule-map-file=$PWD/Sources/CDocumentZlib/module.modulemap" \
+        -experimental-allowed-reexported-modules=DocumentCore,DocumentDOCX,DocumentODT,DocumentPages \
         -minimum-access-level public \
         -omit-extension-block-symbols \
         -output-dir "$graph_path"
@@ -62,6 +62,7 @@ for symbol in graph['symbols']:
     symbol.get('docComment', {}).pop('uri', None)
 Path('.build/docc-public-graphs/SwiftDocuments.symbols.json').write_text(json.dumps(graph))
 PY
+python3 scripts/generate-api-index.py .build/docc-public-graphs/SwiftDocuments.symbols.json
 xcrun docc convert Sources/SwiftDocuments/SwiftDocuments.docc \
     --additional-symbol-graph-dir .build/docc-public-graphs \
     --output-path "$output" \
@@ -72,6 +73,6 @@ xcrun docc convert Sources/SwiftDocuments/SwiftDocuments.docc \
     --warnings-as-errors
 python3 scripts/check-api-reference.py "$output"
 cat > "$output/index.html" <<'HTML'
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="0;url=./documentation/swiftdocuments/"><title>SwiftDocuments API reference</title></head><body><a href="./documentation/swiftdocuments/">SwiftDocuments API reference — in development</a></body></html>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="0;url=./documentation/swiftdocuments/"><title>SwiftDocuments API reference</title></head><body><a href="./documentation/swiftdocuments/">SwiftDocuments API reference</a></body></html>
 HTML
 touch "$output/.nojekyll"

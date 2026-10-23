@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import SwiftDocuments
+@testable import DocumentCore
 
 @Suite struct PackageTests {
     @Test(arguments: [false, true])
@@ -34,6 +35,25 @@ import SwiftDocuments
         data[location.lowerBound] = 0x58
         let d = try Document(data: data)
         #expect(throws: DocumentError.corruptedPackage("CRC mismatch in word/asset.bin")) { try d.asset(at: "word/asset.bin") }
+    }
+    @Test func deflateAndCRCCrossChunkBoundaries() throws {
+        let document = try Document(data: fixture("deflate-boundaries.docx"))
+        #expect(document.plainText == String(repeating: "A", count: 131_072))
+        let bytes = try document.asset(at: "word/blob.bin")
+        #expect(bytes == Data((0..<262_144).map { UInt8($0 % 256) }))
+        #expect(try document.asset(at: "word/empty.bin").isEmpty)
+    }
+    @Test(arguments: ["word/blob.bin", "word/empty.bin"])
+    func deflateRejectsIncorrectExpandedLength(_ path: String) throws {
+        var data = try fixture("deflate-boundaries.docx")
+        let name = try #require(data.range(of: Data(path.utf8), options: .backwards))
+        let directory = name.lowerBound - 46
+        let local = (0..<4).reduce(0) { $0 | Int(data[directory + 42 + $1]) << (8 * $1) }
+        // Change both declarations consistently, once below and once above actual output.
+        let declaredSize: UInt32 = path == "word/blob.bin" ? 262_143 : 1
+        data.set32(declaredSize, at: directory + 24); data.set32(declaredSize, at: local + 22)
+        let archive = try PackageArchive(data)
+        #expect(throws: DocumentError.corruptedPackage("deflate length mismatch in \(path)")) { try archive.read(path) }
     }
     @Test(arguments: [0, 1, 2, 10, 21, 22, 45, 100])
     func truncationIsRejected(_ length: Int) {
@@ -78,7 +98,7 @@ import SwiftDocuments
     func futureCodecsAreNamed(_ name: String) throws {
         let data = try fixture(name), format: DocumentFormat = name.hasSuffix("odt") ? .odt : .pages
         #expect(try DocumentFormat.detect(data) == format)
-        #expect(throws: DocumentError.noCodec(format)) { try Document.read(data) }
+        #expect(throws: DocumentError.noCodec(format)) { try CodecSet([.docx, .docm]).read(data) }
     }
     @Test func absentLinkedCodecIsLoud() throws {
         #expect(throws: DocumentError.noCodec(.docm)) { try CodecSet([.docx]).read(fixture("macro.docm")) }
@@ -94,7 +114,7 @@ import SwiftDocuments
     }
     @Test func oleContainerIsRefused() {
         let data = Data([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1])
-        #expect(throws: DocumentError.unsupportedContainer("OLE: legacy DOC または暗号化された Office 文書")) { try Document.read(data) }
+        #expect(throws: DocumentError.unsupportedContainer("OLE: legacy DOC or encrypted Office document")) { try Document.read(data) }
     }
     @Test(arguments: ["../../../escape.xml", "https://example.com/file.xml", "..%2f..%2f..%2fescape", "..%5Cescape", "missing.xml"])
     func badInternalRelationships(_ target: String) {

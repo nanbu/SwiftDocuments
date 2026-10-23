@@ -1,6 +1,6 @@
 # Contributing
 
-SwiftDocuments is in development. Discuss API changes in an issue before submitting a large implementation. Read docs/implementation-spec.md and docs/format-design.md; keep Core format-neutral and format-specific interpretation inside codecs.
+The documented reading API follows semantic versioning from 1.0. Discuss API changes in an issue before submitting a large implementation. Read docs/implementation-spec.md and docs/format-design.md; keep Core format-neutral and format-specific interpretation inside codecs.
 
 Run `swift test`, `swift build -c release`, `python3 scripts/check-contract.py` and `python3 scripts/check-public-content.py`. Build the public reference with `scripts/build-docs.sh`. Update the support ledger, relevant documentation and meaningful fixtures together when behavior changes.
 

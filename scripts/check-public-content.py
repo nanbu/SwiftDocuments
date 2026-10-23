@@ -7,21 +7,29 @@ import re
 import subprocess
 import sys
 import zipfile
+from pages_wire import decode_iwa, encode_iwa
 
 RULES = [
     ('personal home path', re.compile(rb'/(?:Users|home)/[A-Za-z0-9_.-]+/')),
     ('private companion reference', re.compile(('SwiftDocuments' + '-Works').encode())),
     ('private key', re.compile(rb'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----')),
     ('GitHub credential', re.compile(rb'(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})')),
+    ('OpenAI credential', re.compile(rb'\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}')),
+    ('AWS access key', re.compile(rb'\b(?:AKIA|ASIA)[A-Z0-9]{16}\b')),
+    ('Google API key', re.compile(rb'\bAIza[A-Za-z0-9_-]{35}\b')),
+    ('Slack credential', re.compile(rb'\bxox[baprs]-[A-Za-z0-9-]{20,}')),
+    ('service credential', re.compile(rb'\b(?:sk_live_|rk_live_)[A-Za-z0-9]{20,}')),
+    ('credential assignment', re.compile(rb'''(?i)["']?(?:api[_-]?key|access[_-]?token|client[_-]?secret|password)["']?\s*[:=]\s*["'][A-Za-z0-9_+/=-]{20,}["']''')),
+    ('embedded private report template', re.compile(rb'''id=["']report-source["']''')),
 ]
 
 
 def check_file(name, data):
     errors = []
     parts = Path(name).parts
-    if any(part in ('archive', 'experiments', 'reports', 'translations') for part in parts):
+    if any(part in ('archive', 'experiments', 'reports', 'translations', 'logs', '.claude', '.codex', '.agents', '.aws') for part in parts):
         errors.append(name + ': private work directory')
-    if Path(name).suffix in ('.bundle', '.pem', '.key') or Path(name).name.startswith('.env'):
+    if Path(name).suffix in ('.bundle', '.pem', '.key', '.p12', '.pfx', '.mobileprovision', '.jks', '.keystore', '.log', '.har') or Path(name).name.startswith('.env') or Path(name).name == '.DS_Store':
         errors.append(name + ': private artifact')
     if re.search(r'benchmark-\d+.*\.json$', name):
         errors.append(name + ': raw measurement record')
@@ -29,6 +37,12 @@ def check_file(name, data):
     if zipfile.is_zipfile(io.BytesIO(data)):
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             blobs += [(name + ':' + entry, archive.read(entry)) for entry in archive.namelist() if not entry.endswith('/')]
+            for entry in archive.namelist():
+                if entry.startswith('Index/') and entry.endswith('.iwa'):
+                    try: decoded = decode_iwa(archive.read(entry))
+                    except ValueError as error:
+                        errors.append(name + ':' + entry + ': invalid IWA audit input: ' + str(error))
+                    else: blobs.append((name + ':' + entry + ':decoded', decoded))
     for location, blob in blobs:
         for label, rule in RULES:
             if rule.search(blob): errors.append(location + ': ' + label)
@@ -44,15 +58,33 @@ def self_test():
         ('secret.txt', ('-----BEGIN ' + 'PRIVATE KEY-----').encode(), 'private key'),
         ('config.txt', ('gh' + 'p_' + 'a' * 36).encode(), 'GitHub credential'),
         ('config.txt', ('github_' + 'pat_' + 'a' * 36).encode(), 'GitHub credential'),
+        ('config.txt', ('sk-' + 'proj-' + 'a' * 40).encode(), 'OpenAI credential'),
+        ('config.txt', ('sk-' + 'a' * 40).encode(), 'OpenAI credential'),
+        ('config.txt', ('AK' + 'IA' + 'A' * 16).encode(), 'AWS access key'),
+        ('config.txt', ('AI' + 'za' + 'a' * 35).encode(), 'Google API key'),
+        ('config.txt', ('xo' + 'xb-' + 'a' * 30).encode(), 'Slack credential'),
+        ('config.txt', ('sk_' + 'live_' + 'a' * 30).encode(), 'service credential'),
+        ('config.json', ('{"api_key": "' + 'a' * 32 + '"}').encode(), 'credential assignment'),
+        ('config.txt', ("client_secret = '" + 'a' * 32 + "'").encode(), 'credential assignment'),
+        ('docs/spec.html', ('id="report-' + 'source"').encode(), 'embedded private report template'),
         ('archive/report.md', good, 'private work directory'),
         ('docs/translations/README.md', good, 'private work directory'),
         ('.env.local', good, 'private artifact'),
         ('original.bundle', good, 'private artifact'),
+        ('signing.p12', good, 'private artifact'),
+        ('development.log', good, 'private artifact'),
+        ('.claude/settings.json', good, 'private work directory'),
         ('docs/benchmark-100k.json', good, 'raw measurement record'),
     ]
     packed = io.BytesIO()
     with zipfile.ZipFile(packed, 'w') as archive: archive.writestr('docProps/core.xml', bad[0][1])
     bad.append(('fixture.docx', packed.getvalue(), 'personal home path'))
+    packed = io.BytesIO()
+    # Split the forbidden token across Snappy frames so scanning compressed bytes cannot find it.
+    hidden = encode_iwa(bad[0][1][:3]) + encode_iwa(bad[0][1][3:])
+    assert not RULES[0][1].search(hidden)
+    with zipfile.ZipFile(packed, 'w') as archive: archive.writestr('Index/Document.iwa', hidden)
+    bad.append(('fixture.pages', packed.getvalue(), 'personal home path'))
     for name, data, expected in bad:
         if not any(expected in result for result in check_file(name, data)):
             raise RuntimeError('negative control missed: ' + expected)

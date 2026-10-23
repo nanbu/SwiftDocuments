@@ -10,16 +10,20 @@ public enum DocumentError: Error, Sendable, Equatable, CustomStringConvertible {
     case missingPart(String)
     case invalidRelationship(part: String, detail: String)
     case limitExceeded(String)
+    case invalidOptions(String)
+    case invalidModel(String)
     public var description: String {
         switch self {
-        case .unknownFormat: "文書の形式を判定できません。"
-        case .noCodec(let f): "\(f.rawValue) を読むには \(f.productName) が必要です。"
-        case .unsupportedContainer(let s): "未対応のコンテナ: \(s)"
-        case .corruptedPackage(let s): "破損したパッケージ: \(s)"
-        case .invalidXML(let p, let s): "XML の解析失敗 (\(p)): \(s)"
-        case .missingPart(let p): "パーツがありません: \(p)"
-        case .invalidRelationship(let p, let s): "不正な参照 (\(p)): \(s)"
-        case .limitExceeded(let s): "読み取り制限を超えました: \(s)"
+        case .unknownFormat: "The document format could not be determined."
+        case .noCodec(let f): "Reading \(f.rawValue) requires \(f.productName)."
+        case .unsupportedContainer(let s): "Unsupported container: \(s)"
+        case .corruptedPackage(let s): "Corrupted package: \(s)"
+        case .invalidXML(let p, let s): "XML parsing failed (\(p)): \(s)"
+        case .missingPart(let p): "Missing part: \(p)"
+        case .invalidRelationship(let p, let s): "Invalid relationship (\(p)): \(s)"
+        case .limitExceeded(let s): "Reading limit exceeded: \(s)"
+        case .invalidOptions(let s): "Invalid reading options: \(s)"
+        case .invalidModel(let s): "Invalid document model: \(s)"
         }
     }
 }
@@ -102,7 +106,7 @@ public struct ScanResult: Sendable {
 }
 /// Package format, metadata and part inventory without body parsing.
 public struct DocumentSummary: Sendable, Codable {
-    /// The format identifier or source numbering format, according to this type.
+    /// The content-detected or explicitly selected document format.
     public var format: DocumentFormat
     /// Metadata read from core, extended and custom package properties.
     public var metadata: DocumentMetadata
@@ -121,37 +125,123 @@ public protocol DocumentCodec: Sendable {
 }
 /// A type-erased, Sendable format codec selected by value.
 public struct Codec: Sendable {
-    package var implementation: any DocumentCodec
+    package let implementation: any DocumentCodec
+    /// The format selected by this codec, independently of package detection.
+    public var format: DocumentFormat { implementation.format }
     public init(_ codec: any DocumentCodec) { implementation = codec }
 }
 /// A selection of format codecs. Content detection selects the reader unless explicitly overridden.
 public struct CodecSet: Sendable {
-    private var codecs: [DocumentFormat: any DocumentCodec]
+    private let codecs: [DocumentFormat: Codec]
+    /// Formats in first registration order, without duplicates.
+    public let formats: [DocumentFormat]
     public init(_ codecs: [Codec]) {
-        self.codecs = [:]
-        for codec in codecs { self.codecs[codec.implementation.format] = codec.implementation }
+        var table: [DocumentFormat: Codec] = [:], formats: [DocumentFormat] = []
+        for codec in codecs {
+            if table.updateValue(codec, forKey: codec.format) == nil { formats.append(codec.format) }
+        }
+        self.codecs = table; self.formats = formats
     }
-    private func codec(_ data: Data, format: DocumentFormat?, limits: PackageLimits) throws -> any DocumentCodec {
-        let f = try format ?? DocumentFormat.detect(data, limits: limits)
-        guard let codec = codecs[f] else { throw DocumentError.noCodec(f) }
+    /// Whether a codec for this format is registered.
+    public func contains(_ format: DocumentFormat) -> Bool { codecs[format] != nil }
+    /// The registered choice, suitable for re-registering in another set.
+    /// Throws `noCodec` when absent. Operations are dispatched through the set.
+    public func codec(for format: DocumentFormat) throws -> Codec {
+        guard let codec = codecs[format] else { throw DocumentError.noCodec(format) }
         return codec
     }
-    public func read(_ data: Data, format: DocumentFormat? = nil, options: ReadOptions = .init()) throws -> ReadResult {
-        try codec(data, format: format, limits: options.limits).read(data, options: options)
+    private func selection(_ data: Data, format: DocumentFormat?, limits: PackageLimits) throws -> (codec: any DocumentCodec, package: OPCPackage?) {
+        if let format {
+            let implementation = try codec(for: format).implementation
+            return (implementation, implementation is any PreparedDocumentCodec ? try OPCPackage(data, limits: limits) : nil)
+        }
+        let detected = try DocumentFormat.detectedPackage(data, limits: limits)
+        return (try codec(for: detected.format).implementation, detected.opc)
     }
-    public func read(contentsOf url: URL, options: ReadOptions = .init()) throws -> ReadResult {
-        try read(Data(contentsOf: url, options: .mappedIfSafe), options: options)
+    /// Read bytes with content detection, or an explicitly selected codec.
+    public func read(_ data: Data, format: DocumentFormat? = nil, options: ReadOptions = .init()) throws -> ReadResult {
+        try readSync(data, format: format, options: options)
+    }
+    public func read(contentsOf url: URL, format: DocumentFormat? = nil, options: ReadOptions = .init()) throws -> ReadResult {
+        try readURLSync(url, format: format, options: options)
     }
     public func inspect(_ data: Data, format: DocumentFormat? = nil, limits: PackageLimits = .init()) throws -> DocumentSummary {
-        try codec(data, format: format, limits: limits).inspect(data, limits: limits)
+        try inspectSync(data, format: format, limits: limits)
     }
-    public func inspect(contentsOf url: URL, limits: PackageLimits = .init()) throws -> DocumentSummary {
-        try inspect(Data(contentsOf: url, options: .mappedIfSafe), limits: limits)
+    public func inspect(contentsOf url: URL, format: DocumentFormat? = nil, limits: PackageLimits = .init()) throws -> DocumentSummary {
+        try inspectURLSync(url, format: format, limits: limits)
     }
     public func scan(_ data: Data, format: DocumentFormat? = nil, options: ReadOptions = .init(), onBlock: (Block) throws -> Void) throws -> ScanResult {
-        try codec(data, format: format, limits: options.limits).scan(data, options: options, onBlock: onBlock)
+        try Task.checkCancellation()
+        let selected = try selection(data, format: format, limits: options.limits)
+        func consume(_ block: Block) throws {
+            try Task.checkCancellation()
+            try onBlock(block)
+            try Task.checkCancellation()
+        }
+        let result: ScanResult
+        if let prepared = selected.codec as? any PreparedDocumentCodec, let package = selected.package {
+            result = try prepared.scan(package, options: options, onBlock: consume)
+        } else { result = try selected.codec.scan(data, options: options, onBlock: consume) }
+        try Task.checkCancellation()
+        return result
     }
-    public func scan(contentsOf url: URL, options: ReadOptions = .init(), onBlock: (Block) throws -> Void) throws -> ScanResult {
-        try scan(Data(contentsOf: url, options: .mappedIfSafe), options: options, onBlock: onBlock)
+    public func scan(contentsOf url: URL, format: DocumentFormat? = nil, options: ReadOptions = .init(), onBlock: (Block) throws -> Void) throws -> ScanResult {
+        try Task.checkCancellation()
+        return try scan(Data(contentsOf: url, options: .mappedIfSafe), format: format, options: options, onBlock: onBlock)
+    }
+
+    /// Read on the generic executor, without occupying the caller's actor.
+    /// Cancellation is cooperative; the codec protocol and file I/O remain synchronous.
+    @concurrent public func read(_ data: Data, format: DocumentFormat? = nil, options: ReadOptions = .init()) async throws -> ReadResult {
+        try readSync(data, format: format, options: options)
+    }
+    /// Read a content-detected local package on the generic executor.
+    @concurrent public func read(contentsOf url: URL, format: DocumentFormat? = nil, options: ReadOptions = .init()) async throws -> ReadResult {
+        try readURLSync(url, format: format, options: options)
+    }
+    /// Inspect on the generic executor without parsing body content.
+    @concurrent public func inspect(_ data: Data, format: DocumentFormat? = nil, limits: PackageLimits = .init()) async throws -> DocumentSummary {
+        try inspectSync(data, format: format, limits: limits)
+    }
+    /// Inspect a content-detected local package on the generic executor.
+    @concurrent public func inspect(contentsOf url: URL, format: DocumentFormat? = nil, limits: PackageLimits = .init()) async throws -> DocumentSummary {
+        try inspectURLSync(url, format: format, limits: limits)
+    }
+    /// Read independent documents with bounded concurrency and results in input order.
+    /// Failure cancels and awaits remaining children. The limit bounds active reads, not total memory.
+    @concurrent public func readAll(contentsOf urls: [URL], options: ReadOptions = .init(), maxConcurrentReads: Int = 4) async throws -> [ReadResult] {
+        try await boundedRead(urls, maxConcurrent: maxConcurrentReads) { url in
+            try await self.read(contentsOf: url, options: options)
+        }
+    }
+
+    private func readSync(_ data: Data, format: DocumentFormat?, options: ReadOptions) throws -> ReadResult {
+        try Task.checkCancellation()
+        let selected = try selection(data, format: format, limits: options.limits)
+        let result: ReadResult
+        if let prepared = selected.codec as? any PreparedDocumentCodec, let package = selected.package {
+            result = try prepared.read(package, options: options)
+        } else { result = try selected.codec.read(data, options: options) }
+        try Task.checkCancellation()
+        return result
+    }
+    private func readURLSync(_ url: URL, format: DocumentFormat?, options: ReadOptions) throws -> ReadResult {
+        try Task.checkCancellation()
+        return try readSync(Data(contentsOf: url, options: .mappedIfSafe), format: format, options: options)
+    }
+    private func inspectSync(_ data: Data, format: DocumentFormat?, limits: PackageLimits) throws -> DocumentSummary {
+        try Task.checkCancellation()
+        let selected = try selection(data, format: format, limits: limits)
+        let result: DocumentSummary
+        if let prepared = selected.codec as? any PreparedDocumentCodec, let package = selected.package {
+            result = try prepared.inspect(package)
+        } else { result = try selected.codec.inspect(data, limits: limits) }
+        try Task.checkCancellation()
+        return result
+    }
+    private func inspectURLSync(_ url: URL, format: DocumentFormat?, limits: PackageLimits) throws -> DocumentSummary {
+        try Task.checkCancellation()
+        return try inspectSync(Data(contentsOf: url, options: .mappedIfSafe), format: format, limits: limits)
     }
 }

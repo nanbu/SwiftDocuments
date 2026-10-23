@@ -3,6 +3,11 @@ import Testing
 import SwiftDocuments
 
 @Suite struct FormattingTests {
+    @Test func invalidBooleanFormattingStaysRawInsteadOfBecomingTrue() throws {
+        let d = try Document(data: makeDocument("<w:p><w:pPr><w:keepNext w:val=\"unknown\"/></w:pPr><w:r><w:rPr><w:b w:val=\"unknown\"/></w:rPr><w:t>Source</w:t></w:r></w:p>"))
+        #expect(d.paragraphs[0].formatting.keepWithNext == nil && d.paragraphs[0].runs[0].formatting.bold == nil)
+        #expect(Set(d.readWarnings.map(\.element)).isSuperset(of: ["keepNext", "b"]))
+    }
     @Test func eastAsianAndComplexScriptFormatting() throws {
         let d = try Document(data: makeDocument("<w:p><w:r><w:rPr><w:rFonts w:ascii=\"Latin\" w:eastAsia=\"日本語\" w:cs=\"Arabic\"/><w:sz w:val=\"24\"/><w:szCs w:val=\"28\"/><w:bCs/><w:iCs w:val=\"0\"/><w:lang w:val=\"en-US\" w:eastAsia=\"ja-JP\" w:bidi=\"ar-SA\"/><w:spacing w:val=\"20\"/><w:kern w:val=\"16\"/><w:vertAlign w:val=\"superscript\"/></w:rPr><w:t>文字</w:t></w:r></w:p>"))
         let f = d.paragraphs[0].runs[0].formatting
@@ -57,5 +62,37 @@ import SwiftDocuments
         #expect(result.warnings.first { $0.element == "footnoteReference" }?.count == 2)
         var count = 0; let scanned = try Document.scan(data) { _ in count += 1 }
         #expect(count == 1 && scanned.warnings == result.warnings)
+    }
+    @Test func missingStyleWarningsIdentifyEachReferringPart() throws {
+        let styled = "<w:p><w:pPr><w:pStyle w:val=\"missingParagraph\"/></w:pPr><w:r><w:rPr><w:rStyle w:val=\"missingCharacter\"/><w:b/></w:rPr><w:t>Kept</w:t></w:r></w:p>"
+        let header = "<w:hdr xmlns:w=\"\(wordNS)\">\(styled)</w:hdr>"
+        let data = makeDocument(styled + styled, extra: ["word/header.xml": header],
+                                relations: [("header", "header", "header.xml", false)])
+        let result = try Document.read(data)
+        #expect(result.document.plainText == "Kept\nKept")
+        #expect(result.document.paragraphs.allSatisfy { $0.styleID == "missingParagraph" })
+        #expect(result.document.paragraphs.flatMap(\.runs).allSatisfy { $0.styleID == "missingCharacter" && $0.formatting.bold == true })
+        let warnings = result.warnings.filter { $0.code == .invalidReference }
+        #expect(warnings.count == 4)
+        for element in ["pStyle", "rStyle"] {
+            #expect(warnings.first { $0.part == "word/document.xml" && $0.element == element }?.count == 2)
+            #expect(warnings.first { $0.part == "word/header.xml" && $0.element == element }?.count == 1)
+        }
+        let scan = try Document.scan(data) { _ in }
+        #expect(scan.warnings == result.warnings)
+        let omitted = try Document.read(data, options: .init(includeRelatedStories: false))
+        #expect(!omitted.warnings.contains { $0.code == .invalidReference && $0.part == "word/header.xml" })
+    }
+    @Test func missingBaseStyleWarnsOncePerDeclarationAndRetainsFormatting() throws {
+        let styles = "<w:styles xmlns:w=\"\(wordNS)\"><w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val=\"24\"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:styleId=\"Base\"><w:basedOn w:val=\"missing\"/><w:rPr><w:b/></w:rPr></w:style><w:style w:styleId=\"Child\"><w:basedOn w:val=\"Base\"/><w:rPr><w:i/></w:rPr></w:style></w:styles>"
+        let styled = "<w:p><w:pPr><w:pStyle w:val=\"Child\"/></w:pPr><w:r><w:t>Kept</w:t></w:r></w:p>"
+        let result = try Document.read(makeDocument(styled + styled, extra: ["word/styles.xml": styles],
+                                      relations: [("styles", "styles", "styles.xml", false)]))
+        let warning = try #require(result.warnings.first { $0.code == .invalidReference })
+        #expect(warning.part == "word/styles.xml" && warning.element == "basedOn" && warning.count == 1)
+        #expect(result.warnings.filter { $0.code == .invalidReference }.count == 1)
+        let formatting = try #require(result.document.paragraphs.first?.runs.first?.formatting)
+        #expect(formatting.bold == true && formatting.italic == true && formatting.fontSize == 12)
+        #expect(result.document.styles["Base"]?.basedOn == "missing")
     }
 }

@@ -50,6 +50,8 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     simple = package('<w:p><w:r><w:t xml:space="preserve">こんにちは &amp; Swift </w:t><w:tab/><w:t>Documents</w:t><w:br/><w:t>第二行</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:left="1440"/></w:sectPr>')
     save("minimal.docx", simple); save("stored.docx", simple, zipfile.ZIP_STORED)
+    save("deflate-boundaries.docx", package('<w:p><w:r><w:t>' + 'A' * 131_072 + '</w:t></w:r></w:p>',
+        extras={"word/blob.bin": bytes(range(256)) * 1024, "word/empty.bin": b""}))
     save("strict.docx", {k: v.replace(W, "http://purl.oclc.org/ooxml/wordprocessingml/main").replace(R, "http://purl.oclc.org/ooxml/officeDocument/relationships") for k, v in simple.items()})
     save("relocated.docx", package('<w:p><w:r><w:t>別の場所</w:t></w:r></w:p>', main="content/main.xml"))
     styles = word_root("styles", '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Default"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:b/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading"><w:name w:val="見出し"/><w:basedOn w:val="Normal"/><w:pPr><w:jc w:val="center"/><w:keepNext/></w:pPr><w:rPr><w:b/><w:i/><w:sz w:val="36"/></w:rPr></w:style><w:style w:type="character" w:styleId="Emphasis"><w:name w:val="Emphasis"/><w:rPr><w:i/></w:rPr></w:style>')

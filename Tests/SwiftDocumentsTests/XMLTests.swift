@@ -4,6 +4,17 @@ import SwiftDocuments
 @testable import DocumentCore
 
 @Suite struct XMLTests {
+    @Test func supportedCompatibilityChoicePrecedesFallback() throws {
+        let body = "<mc:AlternateContent><mc:Choice xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" Requires=\"wps\">\(paragraph("Native"))</mc:Choice><mc:Fallback>\(paragraph("Fallback"))</mc:Fallback></mc:AlternateContent>"
+        #expect(try Document(data: makeDocument(body)).plainText == "Native")
+    }
+    @Test func qnameValuedAttributesRetainReferencedNamespaceBindings() throws {
+        let source = "<mc:Choice xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:n=\"urn:required\" Requires=\"n\"><n:thing/></mc:Choice>"
+        let node = try XMLTree.parse(Data(source.utf8), part: "test", limits: .init())
+        let reparsed = try XMLTree.parse(Data(node.xml.utf8), part: "raw", limits: .init())
+        #expect(reparsed.namespaceBindings["n"] == "urn:required")
+        #expect(reparsed.children[0].namespace == "urn:required")
+    }
     @Test(arguments: [String.Encoding.utf8, .utf16LittleEndian, .utf16BigEndian])
     func encodings(_ encoding: String.Encoding) throws {
         var parts = documentParts(paragraph("日本語 📄"))
@@ -57,6 +68,14 @@ import SwiftDocuments
         #expect(reparsed.namespace == "urn:u")
         #expect(reparsed.attributes["urn:q|attr"] == "a&b")
         #expect(reparsed.text == "leftmidright")
+    }
+    @Test func reconstructedXMLUsesTheReservedXMLPrefixForSpace() throws {
+        let xml = "<u:unknown xmlns:u=\"urn:u\" xml:space=\"preserve\">  text  </u:unknown>"
+        let root = try XMLTree.parse(Data(xml.utf8), part: "source", limits: .init())
+        #expect(root.xml.contains("xml:space=\"preserve\""))
+        let reparsed = try XMLTree.parse(Data(root.xml.utf8), part: "reconstructed", limits: .init())
+        #expect(reparsed.text == "  text  ")
+        #expect(reparsed.attributes["http://www.w3.org/XML/1998/namespace|space"] == "preserve")
     }
     @Test func whitespaceAndEntitiesArePreserved() throws {
         let d = try Document(data: makeDocument("<w:p><w:r><w:t xml:space=\"preserve\">  A &lt; B &amp; C  </w:t></w:r></w:p>"))

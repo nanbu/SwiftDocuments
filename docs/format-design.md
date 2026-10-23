@@ -4,8 +4,8 @@
 flowchart LR
     A[Caller: Document / CodecSet] --> B[DocumentCore: value model]
     B --> C[DocumentDOCX: OPC / WordprocessingML]
-    B -. future .-> D[DocumentODT: ODF content / styles]
-    B -. future .-> E[DocumentPages: IWA / object graph]
+    B --> D[DocumentODT: ODF content / styles]
+    B --> E[DocumentPages: IWA / object graph]
 ```
 
 ## Shared semantics
@@ -16,7 +16,7 @@ Measurements use points; color fields retain RGB strings and theme references. `
 
 ## Codec boundary
 
-`DocumentCodec` read / inspect / scan share one result contract. `CodecSet` selects linked codecs without Word rules; umbrella convenience APIs use `CodecSet.all`. Core has no Word parser dependency, allowing future ODT-only or Pages-only configurations.
+`DocumentCodec` read / inspect / scan share one result contract. `CodecSet` selects linked codecs without Word rules; umbrella convenience APIs use `CodecSet.all`. Core has no Word parser dependency, allowing ODT-only or Pages-only configurations.
 
 | Concept | Word | LibreOffice Writer | Pages design mapping |
 |---|---|---|---|
@@ -27,17 +27,17 @@ Measurements use points; color fields retain RGB strings and theme references. `
 | Images / positioning | DrawingML / VML | draw:frame | drawable objects; distinguish inline attachment from canvas |
 | Numbering | abstractNum / num / lvlOverride | list-style and list instances | list styles and paragraph list metadata |
 
-This table records design expectations, not verified ODT / Pages reading support.
+ODT and Pages implement the subsets recorded in implementation-spec.md; the table also records future extension points.
 
 ## Adding Writer
 
-ODF MIME detection already exists. `DocumentODT` will resolve common / automatic styles in content.xml and styles.xml, then map text, paragraphs and tables and verify list / page-style differences with fixtures. Preserve frame attachment versus free positioning rather than flattening frames into paragraph text. Reading must not require launching Office or converting a document with another app.
+ODF MIME detection already exists. `DocumentODT` resolves common / automatic styles in content.xml and styles.xml, then maps text, paragraphs and tables; unsupported list/page-style details remain diagnosed source data. Preserve frame attachment versus free positioning rather than flattening frames into paragraph text. Reading must not require launching Office or converting a document with another app.
 
 ## Adding Pages
 
-Pages is not a publicly specified XML format. Interpret Snappy / Protobuf IWA records and object references in a separate internal layer. Current detection checks root type 10000 (TP.DocumentArchive) only; it does not read body meaning. Numbers / Keynote sharing the Index/Document.iwa filename are rejected. Legacy iWork, Index.zip and folder packages are outside detection support.
+Pages is not a publicly specified XML format. Interpret Snappy / Protobuf IWA records and object references in a separate internal layer. The codec validates root type 10000 (TP.DocumentArchive), follows its body reference and resolves UTF-16 text/style boundaries. Point attachments resolve isolated inline tables and images, including table tile/string/rich-text storage and metadata-backed lazy image resources. Positioned content and advanced object semantics remain opaque with warnings. Numbers / Keynote sharing the Index/Document.iwa filename are rejected. Legacy iWork, Index.zip and folder packages are outside detection support.
 
-First verify text, formatting and range boundaries against fixtures; then tables and additional storage regions. Layout documents need an explicit positioned-content model. `UnsupportedContent` is the recovery path until such semantics are implemented.
+Synthetic fixtures verify text, basic formatting, range boundaries and referenced headers/footers. The fictional Pages Creator Studio 15.4 import/save fixture additionally verifies Japanese/emoji text, a 3×2 table and a generated image. The sanitized fixture was reopened in Pages to check its display; producer evidence is limited to that path. Layout documents need an explicit positioned-content model. `UnsupportedContent` is the recovery path until such semantics are implemented.
 
 Sources:
 

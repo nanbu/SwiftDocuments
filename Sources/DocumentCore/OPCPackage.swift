@@ -14,9 +14,13 @@ package struct OPCPackage: Sendable {
     package let mainPart: String
     package let format: DocumentFormat
     package let limits: PackageLimits
+    private let rootRelationships: [String: Relationship]
 
     package init(_ data: Data, limits: PackageLimits) throws {
-        archive = try PackageArchive(data, limits: limits); self.limits = limits
+        try self.init(archive: PackageArchive(data, limits: limits), limits: limits)
+    }
+    package init(archive: PackageArchive, limits: PackageLimits) throws {
+        self.archive = archive; self.limits = limits
         let types = try XMLTree.parse(archive.read("[Content_Types].xml"), part: "[Content_Types].xml", limits: limits)
         guard types.name == "Types", types.namespace == XMLNamespace.contentTypes else { throw DocumentError.corruptedPackage("invalid content types root") }
         var overrides: [String: String] = [:], defs: [String: String] = [:]
@@ -33,6 +37,7 @@ package struct OPCPackage: Sendable {
         }
         contentTypes = overrides; defaults = defs
         let roots = try Self.relationships(archive: archive, source: "", limits: limits, required: true)
+        rootRelationships = roots
         let mains = roots.values.filter { $0.type == "officeDocument" }
         guard mains.count == 1, let main = mains.first?.path else { throw DocumentError.corruptedPackage("expected one internal officeDocument relationship") }
         guard archive.entries[main] != nil else { throw DocumentError.missingPart(main) }
@@ -52,7 +57,8 @@ package struct OPCPackage: Sendable {
         }
     }
     package func relationships(from source: String) throws -> [String: Relationship] {
-        try Self.relationships(archive: archive, source: source, limits: limits, required: source.isEmpty)
+        if source.isEmpty { return rootRelationships }
+        return try Self.relationships(archive: archive, source: source, limits: limits, required: false)
     }
     package static func resolve(_ target: String, from source: String) throws -> String {
         guard !target.contains("\\"), !target.contains("\0"), !target.contains("?"), !target.contains(":") else { throw DocumentError.invalidRelationship(part: source, detail: "invalid internal URI") }
@@ -96,20 +102,38 @@ package struct OPCPackage: Sendable {
 }
 extension DocumentFormat {
     public static func detect(_ data: Data, limits: PackageLimits = .init()) throws -> Self {
+        try detectedPackage(data, limits: limits).format
+    }
+    package static func detectedPackage(_ data: Data, limits: PackageLimits) throws -> DetectedDocumentPackage {
+        try Task.checkCancellation()
         if data.starts(with: [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]) {
-            throw DocumentError.unsupportedContainer("OLE: legacy DOC または暗号化された Office 文書")
+            throw DocumentError.unsupportedContainer("OLE: legacy DOC or encrypted Office document")
         }
         guard data.starts(with: [0x50, 0x4B]) else { throw DocumentError.unknownFormat }
         let archive = try PackageArchive(data, limits: limits)
-        if archive.entries["mimetype"] != nil, String(data: try archive.read("mimetype"), encoding: .utf8) == "application/vnd.oasis.opendocument.text" { return .odt }
+        if archive.entries["mimetype"] != nil, String(data: try archive.read("mimetype"), encoding: .utf8) == "application/vnd.oasis.opendocument.text" { return DetectedDocumentPackage(format: .odt, opc: nil) }
         if archive.entries["Index/Document.iwa"] != nil {
-            guard try IWorkProbe.isPages(archive.read("Index/Document.iwa")) else { throw DocumentError.unknownFormat }
-            return .pages
+            guard try IWorkProbe.isPages(archive.read("Index/Document.iwa"), limits: limits) else { throw DocumentError.unknownFormat }
+            return DetectedDocumentPackage(format: .pages, opc: nil)
         }
         guard archive.entries["[Content_Types].xml"] != nil else { throw DocumentError.unknownFormat }
-        return try OPCPackage(data, limits: limits).format
+        let opc = try OPCPackage(archive: archive, limits: limits)
+        return DetectedDocumentPackage(format: opc.format, opc: opc)
     }
     public static func detect(contentsOf url: URL, limits: PackageLimits = .init()) throws -> Self {
-        try detect(Data(contentsOf: url, options: .mappedIfSafe), limits: limits)
+        try Task.checkCancellation()
+        return try detect(Data(contentsOf: url, options: .mappedIfSafe), limits: limits)
     }
+}
+
+package struct DetectedDocumentPackage {
+    package let format: DocumentFormat
+    package let opc: OPCPackage?
+}
+
+/// Internal reuse for bundled OPC codecs; third-party codecs keep the raw-Data protocol.
+package protocol PreparedDocumentCodec: DocumentCodec {
+    func read(_ package: OPCPackage, options: ReadOptions) throws -> ReadResult
+    func inspect(_ package: OPCPackage) throws -> DocumentSummary
+    func scan(_ package: OPCPackage, options: ReadOptions, onBlock: (Block) throws -> Void) throws -> ScanResult
 }

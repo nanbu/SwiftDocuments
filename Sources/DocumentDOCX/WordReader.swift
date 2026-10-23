@@ -3,22 +3,35 @@ import DocumentCore
 
 /// The read-only OPC / WordprocessingML codec for DOCX or DOCM.
 public struct DOCXCodec: DocumentCodec {
-    /// The format identifier or source numbering format, according to this type.
+    /// The selected Word package format: DOCX or macro-enabled DOCM.
     public let format: DocumentFormat
     public init(macroEnabled: Bool = false) { format = macroEnabled ? .docm : .docx }
     public func read(_ data: Data, options: ReadOptions = .init()) throws -> ReadResult {
+        try read(OPCPackage(data, limits: options.limits), options: options)
+    }
+    public func inspect(_ data: Data, limits: PackageLimits = .init()) throws -> DocumentSummary {
+        try inspect(OPCPackage(data, limits: limits))
+    }
+    public func scan(_ data: Data, options: ReadOptions = .init(), onBlock: (Block) throws -> Void) throws -> ScanResult {
+        try scan(OPCPackage(data, limits: options.limits), options: options, onBlock: onBlock)
+    }
+}
+
+extension DOCXCodec: PreparedDocumentCodec {
+    package func read(_ package: OPCPackage, options: ReadOptions) throws -> ReadResult {
+        try Task.checkCancellation()
         var blocks: [Block] = []
-        var result = try scan(data, options: options) { blocks.append($0) }
+        var result = try scan(package, options: options) { blocks.append($0) }
         result.document.blocks = blocks
         return ReadResult(document: result.document)
     }
-    public func inspect(_ data: Data, limits: PackageLimits = .init()) throws -> DocumentSummary {
-        let package = try OPCPackage(data, limits: limits)
+    package func inspect(_ package: OPCPackage) throws -> DocumentSummary {
+        try Task.checkCancellation()
         guard package.format == format else { throw DocumentError.corruptedPackage("codec / MIME mismatch") }
         return DocumentSummary(format: format, metadata: try metadata(in: package), parts: package.parts)
     }
-    public func scan(_ data: Data, options: ReadOptions = .init(), onBlock: (Block) throws -> Void) throws -> ScanResult {
-        let package = try OPCPackage(data, limits: options.limits)
+    package func scan(_ package: OPCPackage, options: ReadOptions, onBlock: (Block) throws -> Void) throws -> ScanResult {
+        try Task.checkCancellation()
         guard package.format == format else { throw DocumentError.corruptedPackage("codec / MIME mismatch") }
         let warnings = WarningCollector()
         // All parsing stages share one collector, including style resolution and related stories.
@@ -31,26 +44,61 @@ public struct DOCXCodec: DocumentCodec {
             guard let path = match.path else { throw DocumentError.invalidRelationship(part: package.mainPart, detail: "external \(type) part") }
             return path
         }
-        let styles = try loadStyles(path("styles"), package: package, properties: props, warnings: warnings)
+        let stylePart = try path("styles"), numberingPart = try path("numbering"), fontPart = try path("fontTable")
+        let themePart = try path("theme"), settingsPart = try path("settings")
+        props.theme = try loadTheme(themePart, package: package, warnings: warnings)
+        if let settingsPart {
+            let settings = try XMLTree.parse(package.archive.read(settingsPart), part: settingsPart, limits: options.limits)
+            if let mapping = settings.child("clrSchemeMapping") {
+                let keys: Set<String> = ["bg1", "t1", "bg2", "t2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6", "hyperlink", "followedHyperlink"]
+                let values: Set<String> = ["light1", "dark1", "light2", "dark2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6", "hyperlink", "followedHyperlink"]
+                for key in keys {
+                    if let value = mapping.attr(key) {
+                        if values.contains(value) { props.themeColorMapping[key] = value }
+                        else { props.unparsed(mapping, part: settingsPart) }
+                    }
+                }
+                if props.hasExtraAttributes(mapping, allowed: keys) || !mapping.children.isEmpty { props.unparsed(mapping, part: settingsPart) }
+            }
+            if let language = settings.child("themeFontLang") {
+                props.themeLanguages = ["latin": language.attr("val"), "ea": language.attr("eastAsia"), "cs": language.attr("bidi")].compactMapValues { $0 }
+            }
+        }
+        let styles = try loadStyles(stylePart, package: package, properties: props, warnings: warnings)
         let references = StoryReferences()
         var document = Document()
-        document.sourceFormat = format; document.metadata = try metadata(in: package)
+        document.sourceFormat = format; document.metadata = try metadata(in: package, warnings: warnings)
         document.packageParts = package.parts; document.styles = styles.styles
-        document.numbering = try loadNumbering(path("numbering"), package: package, properties: props)
-        document.attach(package.archive)
-        if let settings = try path("settings") {
+        document.numbering = try loadNumbering(numberingPart, package: package, properties: props)
+        document.fonts = try loadFontTable(fontPart, package: package, warnings: warnings)
+        document.theme = props.theme
+        document.attach(package.archive, limits: options.limits)
+        if let settings = settingsPart {
             let root = try XMLTree.parse(package.archive.read(settings), part: settings, limits: options.limits)
             guard root.isWord, root.name == "settings" else { throw DocumentError.invalidXML(part: settings, detail: "expected settings root") }
             for child in root.children { document.settings[child.name] = child.xml }
         }
         let reader = StoryReader(package: package, part: package.mainPart, relationships: relationships, styles: styles, properties: props, options: options, warnings: warnings, numbering: document.numbering, references: references)
+        try reader.prepareCharts()
         var blocksRead = 0
         try withoutActuallyEscaping(onBlock) { callback in
+            let joiner = ParagraphJoiner(view: options.revisions, warnings: warnings, part: package.mainPart)
+            func emit(_ block: Block) throws {
+                try Task.checkCancellation(); try callback(block); try Task.checkCancellation(); blocksRead += 1
+            }
             let root = try XMLTree.parse(package.archive.read(package.mainPart), part: package.mainPart, limits: options.limits) { node in
+                try Task.checkCancellation()
                 if node.isWord && node.name == "sectPr" { reader.sections.append(try reader.section(node)); return }
-                for block in try reader.blocks([node]) { try callback(block); blocksRead += 1 }
+                for block in try reader.blocks([node]) {
+                    for output in joiner.offer(block) { try emit(output) }
+                }
             }
             guard root.isWord, root.name == "document", root.wordChildren("body").count == 1 else { throw DocumentError.invalidXML(part: package.mainPart, detail: "expected document / body") }
+            reader.finishFields()
+            for output in joiner.finish() { try emit(output) }
+            for child in root.children where !(child.isWord && child.name == "body") {
+                document.uninterpretedContent.append(reader.unsupported(child))
+            }
         }
         document.sections = reader.sections
         // The header / footer references omitted in a later section inherit the previous section's reference.
@@ -60,49 +108,55 @@ public struct DOCXCodec: DocumentCodec {
         }
         let kinds: [String: StoryKind] = ["header": .header, "footer": .footer, "footnotes": .footnote, "endnotes": .endnote, "comments": .comment]
         for r in relationships.values.sorted(by: { $0.id < $1.id }) {
+            try Task.checkCancellation()
             guard let kind = kinds[r.type], let part = r.path else { continue }
             if !options.includeRelatedStories {
-                warnings.add(.storiesOmitted, part: part, element: kind.rawValue, message: "ReadOptions により付随本文を省略しました。")
+                warnings.add(.storiesOmitted, part: part, element: kind.rawValue, message: "Related stories were omitted by ReadOptions.")
                 continue
             }
             let storyReader = StoryReader(package: package, part: part, relationships: try package.relationships(from: part), styles: styles, properties: props, options: options, warnings: warnings, numbering: document.numbering, references: references)
+            try storyReader.prepareCharts()
             let root = try XMLTree.parse(package.archive.read(part), part: part, limits: options.limits)
             let expected = [StoryKind.header: "hdr", .footer: "ftr", .footnote: "footnotes", .endnote: "endnotes", .comment: "comments"][kind]!
             guard root.isWord, root.name == expected else { throw DocumentError.invalidXML(part: part, detail: "invalid story root") }
             if kind == .header || kind == .footer {
                 if !document.stories.contains(where: { $0.sourcePart == part && $0.kind == kind }) {
-                    document.stories.append(Story(id: part, kind: kind, sourcePart: part, blocks: try storyReader.blocks(root.children)))
+                    document.stories.append(Story(id: part, kind: kind, sourcePart: part, blocks: try storyReader.independentStoryBlocks(root.children)))
                 }
             } else {
                 for n in root.children {
+                    try Task.checkCancellation()
                     guard n.isWord, n.name == kind.rawValue, let id = n.attr("id") else { throw DocumentError.invalidXML(part: part, detail: "invalid story ID") }
                     guard !document.stories.contains(where: { $0.kind == kind && $0.id == id }) else { throw DocumentError.corruptedPackage("duplicate story ID") }
-                    document.stories.append(Story(id: id, kind: kind, sourcePart: part, blocks: try storyReader.blocks(n.children), author: n.attr("author"), date: n.attr("date"), type: n.attr("type")))
+                    document.stories.append(Story(id: id, kind: kind, sourcePart: part, blocks: try storyReader.independentStoryBlocks(n.children), author: n.attr("author"), date: n.attr("date"), type: n.attr("type")))
                 }
             }
         }
-        let knownTypes: Set<String> = ["officeDocument", "core-properties", "extended-properties", "custom-properties", "styles", "numbering", "settings", "header", "footer", "footnotes", "endnotes", "comments", "image", "hyperlink"]
+        let knownTypes: Set<String> = ["officeDocument", "core-properties", "extended-properties", "custom-properties", "styles", "numbering", "settings", "fontTable", "font", "theme", "header", "footer", "footnotes", "endnotes", "comments", "image", "hyperlink", "chart"]
         var allRelationships = Array(relationships.values) + Array(try package.relationships(from: "").values)
-        for part in Set(document.stories.map(\.sourcePart)).sorted() { allRelationships += Array(try package.relationships(from: part).values) }
+        let supportingParts = [stylePart, numberingPart, fontPart, themePart, settingsPart].compactMap { $0 }
+        for part in Set(document.stories.map(\.sourcePart) + supportingParts).sorted() { allRelationships += Array(try package.relationships(from: part).values) }
         var handled: Set<String> = [package.mainPart, "[Content_Types].xml"]
         for r in allRelationships {
             if let path = r.path { handled.insert(path) }
             if !knownTypes.contains(r.type) {
-                warnings.add(.unsupportedPart, part: r.path ?? package.mainPart, element: r.type, message: "このパーツは解釈していません。パッケージ目録と asset(at:) で確認できます。")
+                warnings.add(.unsupportedPart, part: r.path ?? package.mainPart, element: r.type, message: "Uninterpreted part retained in the package inventory and through asset(at:).")
             }
         }
         for part in package.parts where !handled.contains(part.path) && !part.path.hasSuffix(".rels") {
-            warnings.add(.unsupportedPart, part: part.path, element: part.contentType ?? "unknown", message: "未参照パーツを目録に保持しました。")
+            warnings.add(.unsupportedPart, part: part.path, element: part.contentType ?? "unknown", message: "Unreferenced part retained in the package inventory.")
         }
         if options.includeRelatedStories {
             let available = Set(document.stories.map { StoryReferences.Key(kind: $0.kind, id: $0.id) })
             for (key, locations) in references.locations.sorted(by: { ($0.key.kind.rawValue, $0.key.id) < ($1.key.kind.rawValue, $1.key.id) }) where !available.contains(key) {
                 for (location, count) in locations.sorted(by: { $0.key < $1.key }) {
-                    warnings.add(.invalidReference, part: location, element: key.kind.rawValue + "Reference", message: "参照先の脚注 / コメント ID がありません。", count: count)
+                    warnings.add(.invalidReference, part: location, element: key.kind.rawValue + "Reference", message: "The referenced note or comment ID is missing.", count: count)
                 }
             }
         }
+        document.fieldDefinitions = references.fields.definitions
         document.readWarnings = warnings.result
+        try Task.checkCancellation()
         return ScanResult(document: document, blocksRead: blocksRead)
     }
 }
@@ -112,26 +166,27 @@ extension Codec {
     public static let docm = Codec(DOCXCodec(macroEnabled: true))
 }
 
-private enum InlineToken {
+enum InlineToken {
     case inline(Inline)
-    case begin(Bool)
-    case instruction(String)
+    case begin(MarkupNode)
+    case instruction(TextRun)
+    case hyperlink(Hyperlink, [InlineToken])
+    case control(ContentControlDescriptor, [InlineToken])
+    case simple(MarkupNode, [InlineToken])
+    case ruby(RubyText, [InlineToken], [InlineToken])
+    case drawing(MarkupNode, legacy: Bool, revision: Revision?)
     case separate
     case end
 }
-private struct OpenField {
-    var instruction = ""
-    var result: [Inline] = []
-    var separated = false
-    var locked = false
-}
-private final class StoryReferences {
+final class StoryReferences {
     struct Key: Hashable { let kind: StoryKind; let id: String }
     var locations: [Key: [String: Int]] = [:]
+    var charts: [String: Chart] = [:]
+    let fields = FieldRegistry()
     func add(_ kind: StoryKind, id: String, part: String) { locations[Key(kind: kind, id: id), default: [:]][part, default: 0] += 1 }
 }
 
-private final class StoryReader {
+final class StoryReader {
     let package: OPCPackage
     let part: String
     let relationships: [String: Relationship]
@@ -142,12 +197,14 @@ private final class StoryReader {
     let numbering: [String: NumberingDefinition]
     let references: StoryReferences
     var sections: [Section] = []
+    var fieldReader = FieldReader()
+    var tableContext: ResolvedStyle?
     init(package: OPCPackage, part: String, relationships: [String: Relationship], styles: StyleResolver, properties: Properties, options: ReadOptions, warnings: WarningCollector, numbering: [String: NumberingDefinition], references: StoryReferences) {
         self.package = package; self.part = part; self.relationships = relationships; self.styles = styles
         self.properties = properties; self.options = options; self.warnings = warnings; self.numbering = numbering; self.references = references
     }
     func unsupported(_ n: MarkupNode) -> UnsupportedContent {
-        warnings.add(.unsupportedContent, part: part, element: "{\(n.namespace)}\(n.name)", message: "未対応要素を記録しました。rawXML または元パーツで確認できます。")
+        warnings.add(.unsupportedContent, part: part, element: "{\(n.namespace)}\(n.name)", message: "Unsupported content is retained in rawXML or the original part.")
         let leaves = n.descendants("t") + n.descendants("delText")
         return UnsupportedContent(name: n.name, sourcePart: part, rawXML: n.xml, text: leaves.map(\.text).joined())
     }
@@ -161,13 +218,13 @@ private final class StoryReader {
     func blocks(_ nodes: [MarkupNode]) throws -> [Block] {
         var result: [Block] = []
         for n in nodes {
+            try Task.checkCancellation()
             if n.isWord {
                 switch n.name {
                 case "p": result.append(.paragraph(try paragraph(n)))
                 case "tbl": result.append(.table(try table(n)))
                 case "sdt":
-                    _ = unsupported(n)
-                    result += try blocks(n.child("sdtContent")?.children ?? [])
+                    result.append(.contentControl(try blockControl(n)))
                 case "customXml": _ = unsupported(n); result += try blocks(n.children)
                 case "ins", "del", "moveFrom", "moveTo": if visible(n.name) { result += try blocks(n.children) }
                 case "sectPr": sections.append(try section(n))
@@ -179,25 +236,46 @@ private final class StoryReader {
                 }
             } else if n.name == "AlternateContent", n.namespace == "http://schemas.openxmlformats.org/markup-compatibility/2006" {
                 result += try blocks(alternate(n))
+            } else if isEquation(n) {
+                var paragraph = Paragraph()
+                paragraph.inlines = [.equation(try equation(n))]
+                result.append(.paragraph(paragraph))
             } else { result.append(.unsupported(unsupported(n))) }
         }
         return result
     }
     func alternate(_ n: MarkupNode) -> [MarkupNode] {
-        // A fallback is guaranteed to be expressed in the base vocabulary; never duplicate Choice and Fallback.
-        if let fallback = n.children.first(where: { $0.name == "Fallback" }) { return fallback.children }
-        warnings.add(.unsupportedContent, part: part, element: "AlternateContent", message: "Fallback がないため最初の Choice の内容を読みました。")
-        return n.children.first(where: { $0.name == "Choice" })?.children ?? []
+        let compatibility = "http://schemas.openxmlformats.org/markup-compatibility/2006"
+        for choice in n.children where choice.namespace == compatibility && choice.name == "Choice" {
+            let requirements = (choice.attr("Requires") ?? "").split(whereSeparator: \.isWhitespace).map(String.init)
+            if !requirements.isEmpty && requirements.allSatisfy({ choice.namespaceBindings[$0].map(supportedCompatibilityNamespace) ?? false }) { return choice.children }
+        }
+        if let fallback = n.children.first(where: { $0.name == "Fallback" && $0.namespace == compatibility }) { return fallback.children }
+        warnings.add(.unsupportedContent, part: part, element: "AlternateContent", message: "No compatible fallback is available; the first Choice content was retained.")
+        return n.children.first(where: { $0.name == "Choice" && $0.namespace == compatibility })?.children ?? []
     }
     func paragraph(_ n: MarkupNode) throws -> Paragraph {
-        let props = n.child("pPr"), styleID = props?.child("pStyle")?.value
-        let base = try styles.paragraph(styleID)
+        let current = n.child("pPr"), history = try formerProperties(current, change: "pPrChange", properties: "pPr"), former = history?.1
+        let props = options.revisions == .original ? former ?? current : current
+        let styleID = props?.child("pStyle")?.value
+        if let styleID, styles.styles[styleID] == nil {
+            warnings.add(.invalidReference, part: part, element: "pStyle", message: "The paragraph style is missing; the source ID and content are retained.")
+        }
+        let base = try styles.paragraph(styleID, table: tableContext)
         var p = Paragraph(); p.styleID = styleID; p.formatting = base.paragraph
-        p.formatting.merge(properties.paragraph(props, part: part))
-        p.list = properties.list(props, inheriting: base.list)
+        p.defaultTextFormatting = try styles.text(nil, base: base.text, direct: .init())
+        if let former, let change = history?.0 {
+            var previous = try styles.paragraph(former.child("pStyle")?.value).paragraph
+            previous.merge(properties.paragraph(former, part: part))
+            p.formattingChange = try ParagraphFormattingChange(revision: readRevision(change, kind: .formatting), previous: previous, source: SourceXMLNode(change))
+        }
+        if options.revisions == .original, let change = p.formattingChange { p.formatting = change.previous }
+        else { p.formatting.merge(properties.paragraph(props, part: part)) }
+        try paragraphMark(current?.child("rPr"), base: base.text, paragraph: &p)
+        p.list = try properties.list(props, part: part, inheriting: base.list)
         if p.list?.id == "0" { p.list = nil }
         if let list = p.list, numbering[list.id]?.levels[list.level] == nil {
-            warnings.add(.invalidReference, part: part, element: "numPr", message: "番号付けの定義またはレベルがありません。")
+            warnings.add(.invalidReference, part: part, element: "numPr", message: "The numbering definition or level is missing.")
         }
         p.inlines = try resolve(tokens(n.children.filter { !($0.isWord && $0.name == "pPr") }, base: base.text, revision: nil))
         if let s = props?.child("sectPr") { p.sectionBreak = try section(s); sections.append(p.sectionBreak!) }
@@ -206,17 +284,34 @@ private final class StoryReader {
     func tokens(_ nodes: [MarkupNode], base: TextFormatting, revision: Revision?) throws -> [InlineToken] {
         var result: [InlineToken] = []
         for n in nodes {
+            try Task.checkCancellation()
             if n.isWord {
                 switch n.name {
                 case "r":
-                    let props = n.child("rPr"), style = props?.child("rStyle")?.value
-                    let formatting = try styles.text(style, base: base, direct: properties.text(props, part: part))
+                    let (formatting, change, style) = try textFormatting(n.child("rPr"), base: base)
                     for child in n.children where !(child.isWord && child.name == "rPr") {
                         if child.isWord && ["t", "delText"].contains(child.name) {
-                            result.append(.inline(.text(TextRun(child.text, formatting: formatting, styleID: style, revision: revision))))
+                            result.append(.inline(.text(makeRun(child.text, formatting: formatting, styleID: style, revision: revision, change: change))))
                         } else { result += try tokens([child], base: formatting, revision: revision) }
                     }
-                case "t", "delText": result.append(.inline(.text(TextRun(n.text, formatting: base, revision: revision))))
+                case "t", "delText": result.append(.inline(.text(makeRun(n.text, formatting: base, revision: revision))))
+                case "sym":
+                    guard let font = n.attr("font"), let code = n.attr("char").flatMap({ UInt32($0, radix: 16) }), let scalar = Unicode.Scalar(code) else {
+                        throw DocumentError.invalidXML(part: part, detail: "invalid symbol font/character")
+                    }
+                    var run = TextRun(String(scalar), formatting: base, revision: revision)
+                    run.symbol = SymbolCharacter(fontName: font, characterCode: code)
+                    result.append(.inline(.text(run)))
+                case "ruby":
+                    var ruby = RubyText(base: [], annotation: [])
+                    let props = n.child("rubyPr")
+                    ruby.alignment = props?.child("rubyAlign")?.value
+                    ruby.annotationSize = halfPoints(props?.child("hps")?.value)
+                    ruby.baseSize = halfPoints(props?.child("hpsBaseText")?.value)
+                    ruby.language = props?.child("lid")?.value
+                    ruby.rawProperties = props?.children.map(\.xml) ?? []
+                    result.append(.ruby(ruby, try tokens(n.child("rubyBase")?.children ?? [], base: base, revision: revision),
+                                        try tokens(n.child("rt")?.children ?? [], base: base, revision: revision)))
                 case "tab", "ptab":
                     if n.name == "ptab" { _ = unsupported(n) }
                     result.append(.inline(.tab))
@@ -227,19 +322,21 @@ private final class StoryReader {
                 case "hyperlink":
                     var target: String?
                     if let id = n.rel("id") { let r = try relationship(id, expected: "hyperlink"); target = r.isExternal ? r.target : r.path }
-                    let inlines = try resolve(tokens(n.children, base: base, revision: revision))
-                    result.append(.inline(.hyperlink(Hyperlink(target: target, anchor: n.attr("anchor"), tooltip: n.attr("tooltip"), inlines: inlines))))
+                    result.append(.hyperlink(Hyperlink(target: target, anchor: n.attr("anchor"), tooltip: n.attr("tooltip"), inlines: []),
+                                             try tokens(n.children, base: base, revision: revision)))
                 case "fldSimple":
-                    result.append(.inline(.field(Field(instruction: n.attr("instr") ?? "", result: try resolve(tokens(n.children, base: base, revision: revision)), isLocked: n.attr("fldLock").map { ["1", "true", "on"].contains($0) } ?? false))))
+                    result.append(.simple(n, try tokens(n.children, base: base, revision: revision)))
                 case "fldChar":
+                    fieldProperties(n)
                     switch n.attr("fldCharType") {
-                    case "begin": result.append(.begin(n.attr("fldLock").map { ["1", "true", "on"].contains($0) } ?? false))
+                    case "begin": result.append(.begin(n))
                     case "separate": result.append(.separate)
                     case "end": result.append(.end)
                     default: result.append(.inline(.unsupported(unsupported(n))))
                     }
-                case "instrText", "delInstrText": result.append(.instruction(n.text))
-                case "drawing", "pict": result += try images(n)
+                case "instrText", "delInstrText": result.append(.instruction(makeRun(n.text, formatting: base, revision: revision)))
+                case "drawing": result.append(.drawing(n, legacy: false, revision: revision))
+                case "pict": result.append(.drawing(n, legacy: true, revision: revision))
                 case "footnoteReference", "endnoteReference":
                     let id = n.attr("id") ?? "", kind: StoryKind = n.name == "footnoteReference" ? .footnote : .endnote
                     references.add(kind, id: id, part: part)
@@ -252,9 +349,9 @@ private final class StoryReader {
                 case "ins", "del", "moveFrom", "moveTo":
                     guard visible(n.name) else { continue }
                     let kind: Revision.Kind = n.name == "ins" ? .insertion : n.name == "del" ? .deletion : n.name == "moveFrom" ? .moveFrom : .moveTo
-                    let change = Revision(id: n.attr("id") ?? "", kind: kind, author: n.attr("author"), date: n.attr("date"))
+                    let change = readRevision(n, kind: kind)
                     result += try tokens(n.children, base: base, revision: change)
-                case "sdt": _ = unsupported(n); result += try tokens(n.child("sdtContent")?.children ?? [], base: base, revision: revision)
+                case "sdt": result.append(.control(try controlDescriptor(n), try tokens(controlChildren(n), base: base, revision: revision)))
                 case "customXml", "smartTag": _ = unsupported(n); result += try tokens(n.children, base: base, revision: revision)
                 case "proofErr", "lastRenderedPageBreak", "footnoteRef", "endnoteRef", "annotationRef", "permStart", "permEnd", "separator", "continuationSeparator": break
                 case "moveFromRangeStart", "moveFromRangeEnd", "moveToRangeStart", "moveToRangeEnd": _ = unsupported(n)
@@ -262,35 +359,14 @@ private final class StoryReader {
                 }
             } else if n.name == "AlternateContent", n.namespace == "http://schemas.openxmlformats.org/markup-compatibility/2006" {
                 result += try tokens(alternate(n), base: base, revision: revision)
+            } else if isEquation(n) {
+                result.append(.inline(.equation(try equation(n))))
             } else { result.append(.inline(.unsupported(unsupported(n)))) }
         }
         return result
     }
     func resolve(_ tokens: [InlineToken]) throws -> [Inline] {
-        var output: [Inline] = [], fields: [OpenField] = []
-        func append(_ inline: Inline) {
-            if !fields.isEmpty { fields[fields.count - 1].result.append(inline) } else { output.append(inline) }
-        }
-        for token in tokens {
-            switch token {
-            case .inline(let inline): append(inline)
-            case .begin(let locked): fields.append(OpenField(locked: locked))
-            case .instruction(let s):
-                if !fields.isEmpty { fields[fields.count - 1].instruction += s }
-                else { warnings.add(.incompleteField, part: part, element: "instrText", message: "field 開始マーカーのない命令を検出しました。") }
-            case .separate:
-                if !fields.isEmpty { fields[fields.count - 1].separated = true }
-                else { warnings.add(.incompleteField, part: part, element: "fldChar", message: "対応する field 開始がありません。") }
-            case .end:
-                if let field = fields.popLast() { append(.field(Field(instruction: field.instruction, result: field.result, isLocked: field.locked))) }
-                else { warnings.add(.incompleteField, part: part, element: "fldChar", message: "対応する field 開始がありません。") }
-            }
-        }
-        while let field = fields.popLast() {
-            warnings.add(.incompleteField, part: part, element: "fldChar", message: "段落をまたぐ field または終端のない field を段落単位で保持しました。")
-            append(.field(Field(instruction: field.instruction, result: field.result, isLocked: field.locked)))
-        }
-        return output
+        try fieldReader.resolve(tokens, reader: self)
     }
     func relationship(_ id: String, expected: String) throws -> Relationship {
         guard let r = relationships[id], r.type == expected else { throw DocumentError.invalidRelationship(part: part, detail: "missing / wrong-type \(expected) relationship \(id)") }
@@ -313,72 +389,94 @@ private final class StoryReader {
             result.append(.inline(.image(image)))
         }
         if !vml.isEmpty || !n.descendants("anchor").isEmpty || !n.descendants("txbxContent").isEmpty {
-            warnings.add(.unsupportedContent, part: part, element: "drawingLayout", message: "浮動配置 / VML / テキストボックスの詳細は rawXML に保持しました。")
+            warnings.add(.unsupportedContent, part: part, element: "drawingLayout", message: "Floating placement, VML and text-box details are retained in rawXML.")
         }
         for chart in n.descendants("chart") { _ = unsupported(chart) }
         return result
     }
     func table(_ n: MarkupNode) throws -> Table {
         var t = Table()
-        let props = n.child("tblPr")
-        t.styleID = props?.child("tblStyle")?.value
-        t.properties = props?.children.map(\.xml) ?? []
-        t.columnWidths = n.child("tblGrid")?.wordChildren("gridCol").compactMap { points($0.attr("w")) } ?? []
-        func rows(_ nodes: [MarkupNode]) throws -> [TableRow] {
+        (t.formatting, t.formattingChange) = try changedProperties(n.child("tblPr"), change: "tblPrChange", properties: "tblPr") { try properties.tableFormatting($0, part: part) }
+        (t.columns, t.columnChange) = try changedProperties(n.child("tblGrid"), change: "tblGridChange", properties: "tblGrid") { try properties.tableColumns($0, part: part) }
+        let savedContext = tableContext
+        defer { tableContext = savedContext }
+        tableContext = nil
+        let selectedTableProperties = options.revisions == .original ? n.child("tblPr")?.child("tblPrChange")?.child("tblPr") ?? n.child("tblPr") : n.child("tblPr")
+        let tableStyle = try TableStyleContext(node: n, tableProperties: selectedTableProperties, columnCount: t.columns.count, styleID: t.styleID, styles: styles, properties: properties, part: part, options: options)
+        var tableFormatting = tableStyle.formatting
+        tableFormatting.merge(t.formatting); tableFormatting.rawProperties = t.properties
+        t.formatting = tableFormatting
+        var rowControls: [ContentControlRange] = []
+        func rows(_ nodes: [MarkupNode], baseIndex: Int = 0, inheritedRevisions: [Revision] = []) throws -> [TableRow] {
             var result: [TableRow] = []
             for rowNode in nodes {
+                try Task.checkCancellation()
                 if rowNode.isWord && rowNode.name == "tr" {
                     var row = TableRow(); let rp = rowNode.child("trPr")
                     if let deletion = rp?.child("del"), !visible(deletion.name) { continue }
                     if let insertion = rp?.child("ins"), !visible(insertion.name) { continue }
-                    row.isHeader = rp?.child("tblHeader")?.on ?? false
-                    row.height = points(rp?.child("trHeight")?.attr("val")); row.properties = rp?.children.map(\.xml) ?? []
-                    func cells(_ nodes: [MarkupNode]) throws -> [TableCell] {
+                    row.revisions = inheritedRevisions + (rp?.children.filter { $0.isWord && ["ins", "del"].contains($0.name) }.map { readRevision($0, kind: $0.name == "ins" ? .insertion : .deletion) } ?? [])
+                    (row.formatting, row.formattingChange) = try changedProperties(rp, change: "trPrChange", properties: "trPr") { try properties.rowFormatting($0, part: part) }
+                    if let exceptions = rowNode.child("tblPrEx") {
+                        (row.tableOverrides, row.tableOverridesChange) = try changedProperties(exceptions, change: "tblPrExChange", properties: "tblPrEx") { try properties.tableFormatting($0, part: part) }
+                    }
+                    let rowIndex = baseIndex + result.count
+                    var columnIndex = row.omittedLeadingColumns
+                    var cellControls: [ContentControlRange] = []
+                    func cells(_ nodes: [MarkupNode], baseIndex: Int = 0, inheritedRevisions: [Revision] = []) throws -> [TableCell] {
                         var result: [TableCell] = []
                         for cn in nodes {
+                            try Task.checkCancellation()
                             if cn.isWord && cn.name == "tc" {
                                 var cell = TableCell(); let cp = cn.child("tcPr")
-                                cell.columnSpan = max(1, integer(cp?.child("gridSpan")?.value) ?? 1)
-                                if let merge = cp?.child("vMerge") { cell.verticalMerge = merge.value == "restart" ? .restart : .continuation }
-                                let width = cp?.child("tcW"); cell.widthUnit = width?.attr("type") ?? "dxa"
-                                cell.width = width?.attr("w").flatMap(Double.init).map { cell.widthUnit == "dxa" ? $0 / 20 : $0 }
-                                cell.verticalAlignment = cp?.child("vAlign")?.value; cell.shading = cp?.child("shd")?.attr("fill")
-                                cell.properties = cp?.children.map(\.xml) ?? []
-                                cell.blocks = try blocks(cn.children.filter { !($0.isWord && $0.name == "tcPr") }); result.append(cell)
-                            } else if cn.isWord && cn.name == "sdt" { _ = unsupported(cn); result += try cells(cn.child("sdtContent")?.children ?? []) }
-                            else if cn.isWord && ["ins", "del"].contains(cn.name) { if visible(cn.name) { result += try cells(cn.children) } }
-                            else if cn.name != "trPr" { _ = unsupported(cn) }
+                                if cp?.child("cellDel") != nil && options.revisions == .final { continue }
+                                if cp?.child("cellIns") != nil && options.revisions == .original { continue }
+                                cell.revisions = inheritedRevisions + (cp?.children.filter { $0.isWord && ["cellIns", "cellDel"].contains($0.name) }.map { readRevision($0, kind: $0.name == "cellIns" ? .insertion : .deletion) } ?? [])
+                                (cell.formatting, cell.formattingChange) = try changedProperties(cp, change: "tcPrChange", properties: "tcPr") { try properties.cellFormatting($0, part: part) }
+                                cell.mergeChange = try cellMergeChange(cp?.child("cellMerge"))
+                                if let change = cell.mergeChange {
+                                    let merged = options.revisions == .original ? change.wasMergedWithPrevious : change.isMergedWithPrevious
+                                    if merged { cell.verticalMerge = .continuation }
+                                    else if cell.verticalMerge == .continuation { cell.verticalMerge = nil }
+                                }
+                                let conditional = tableStyle.resolve(row: rowIndex, column: columnIndex, span: cell.columnSpan)
+                                var appearance = conditional.cell
+                                appearance.mergeAppearance(cell.formatting)
+                                var effective = cell.formatting
+                                effective.shading = appearance.shading; effective.verticalAlignment = appearance.verticalAlignment
+                                effective.preferredWidth = appearance.preferredWidth; effective.borders = appearance.borders; effective.margins = appearance.margins
+                                effective.textDirection = appearance.textDirection; effective.noWrap = appearance.noWrap; effective.fitText = appearance.fitText
+                                cell.formatting = effective
+                                tableContext = conditional.text
+                                let (nextColumn, overflow) = columnIndex.addingReportingOverflow(cell.columnSpan)
+                                guard !overflow else { throw DocumentError.invalidXML(part: part, detail: "table grid overflow") }; columnIndex = nextColumn
+                                cell.blocks = try storyBlocks(cn.children.filter { !($0.isWord && $0.name == "tcPr") }); result.append(cell)
+                            } else if cn.isWord && cn.name == "sdt" {
+                                let start = baseIndex + result.count, index = cellControls.count
+                                cellControls.append(ContentControlRange(range: start..<start, descriptor: try controlDescriptor(cn)))
+                                let content = try cells(controlChildren(cn), baseIndex: start, inheritedRevisions: inheritedRevisions)
+                                cellControls[index].range = start..<(start + content.count)
+                                result += content
+                            }
+                            else if cn.isWord && ["ins", "del"].contains(cn.name) { if visible(cn.name) { result += try cells(cn.children, baseIndex: baseIndex + result.count, inheritedRevisions: inheritedRevisions + [readRevision(cn, kind: cn.name == "ins" ? .insertion : .deletion)]) } }
+                            else if !(cn.isWord && ["trPr", "tblPrEx"].contains(cn.name)) { _ = unsupported(cn) }
                         }
                         return result
                     }
-                    row.cells = try cells(rowNode.children); result.append(row)
-                } else if rowNode.isWord && rowNode.name == "sdt" { _ = unsupported(rowNode); result += try rows(rowNode.child("sdtContent")?.children ?? []) }
-                else if rowNode.isWord && ["ins", "del"].contains(rowNode.name) { if visible(rowNode.name) { result += try rows(rowNode.children) } }
-                else if !["tblPr", "tblGrid"].contains(rowNode.name) { _ = unsupported(rowNode) }
+                    row.cells = try cells(rowNode.children); row.cellControls = cellControls; result.append(row)
+                } else if rowNode.isWord && rowNode.name == "sdt" {
+                    let start = baseIndex + result.count, index = rowControls.count
+                    rowControls.append(ContentControlRange(range: start..<start, descriptor: try controlDescriptor(rowNode)))
+                    let content = try rows(controlChildren(rowNode), baseIndex: start, inheritedRevisions: inheritedRevisions)
+                    rowControls[index].range = start..<(start + content.count)
+                    result += content
+                }
+                else if rowNode.isWord && ["ins", "del"].contains(rowNode.name) { if visible(rowNode.name) { result += try rows(rowNode.children, baseIndex: baseIndex + result.count, inheritedRevisions: inheritedRevisions + [readRevision(rowNode, kind: rowNode.name == "ins" ? .insertion : .deletion)]) } }
+                else if !(rowNode.isWord && ["tblPr", "tblGrid"].contains(rowNode.name)) { _ = unsupported(rowNode) }
             }
             return result
         }
-        t.rows = try rows(n.children)
-        if let props {
-            for child in props.children where !["tblStyle", "tblW", "jc", "tblBorders", "shd", "tblCellMar", "tblLayout", "tblLook", "tblInd", "tblCaption", "tblDescription"].contains(child.name) { properties.unparsed(child, part: part) }
-        }
+        t.rows = try rows(n.children); t.rowControls = rowControls
         return t
-    }
-    func section(_ n: MarkupNode) throws -> Section {
-        var s = Section(); s.rawProperties = n.children.map(\.xml)
-        s.pageWidth = points(n.child("pgSz")?.attr("w")); s.pageHeight = points(n.child("pgSz")?.attr("h")); s.orientation = n.child("pgSz")?.attr("orient").flatMap(PageOrientation.init(rawValue:))
-        if let margins = n.child("pgMar") {
-            for key in ["top", "right", "bottom", "left", "header", "footer", "gutter"] { if let value = points(margins.attr(key)) { s.margins[key] = value } }
-        }
-        s.columnCount = integer(n.child("cols")?.attr("num")) ?? 1
-        s.breakKind = n.child("type")?.value; s.hasDifferentFirstPage = n.child("titlePg")?.on ?? false
-        for child in n.children {
-            if child.isWord && ["headerReference", "footerReference"].contains(child.name), let id = child.rel("id") {
-                let header = child.name == "headerReference", r = try relationship(id, expected: header ? "header" : "footer")
-                guard let path = r.path else { throw DocumentError.invalidRelationship(part: part, detail: "external header / footer") }
-                if header { s.headers[child.attr("type") ?? "default"] = path } else { s.footers[child.attr("type") ?? "default"] = path }
-            } else if !["pgSz", "pgMar", "cols", "type", "titlePg"].contains(child.name) { properties.unparsed(child, part: part) }
-        }
-        return s
     }
 }

@@ -4,4 +4,4 @@ Untrusted documents are parsed without executing macros or fetching external rel
 
 Report vulnerabilities privately through [GitHub private vulnerability reporting](https://github.com/nanbu/SwiftDocuments/security/advisories/new). Include a minimal synthetic reproduction, expected behavior and the Swift / OS versions. Avoid posting exploitable documents in a public issue while a report is being investigated.
 
-This project is in development and has no stable release or guaranteed security-response timeline yet.
+Security fixes target the latest 1.x release. There is no guaranteed security-response timeline.

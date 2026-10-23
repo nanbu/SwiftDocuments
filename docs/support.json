@@ -1,5 +1,35 @@
 [
   {
+    "feature": "Codec selection and content detection",
+    "status": "supported",
+    "tests": [
+      "codecRegistrationOrderAndReplacement",
+      "explicitDataFormatAndOptionsReachEveryOperation",
+      "facadeFormatOverrideValidatesMIME",
+      "formatExtensionsDoNotChangeContentDetection",
+      "facadeWithoutUmbrella",
+      "explicitURLFormatMatchesBytesAcrossEntryPoints"
+    ]
+  },
+  {
+    "feature": "Async and bounded batch reading",
+    "status": "supported",
+    "tests": [
+      "asyncDispatchLeavesMainActorAndPreservesTaskLocal",
+      "asyncFacadeMatchesSynchronousReadInspectAndAssets",
+      "boundedReadsKeepInputOrderDespiteReversedCompletion",
+      "failedBatchCancelsAndJoinsRemainingChildren",
+      "parentCancellationJoinsRemainingChildren",
+      "batchURLReadsPreserveDuplicatesOptionsAndWarnings",
+      "cancelledEntryPointsDoNotDispatchOrReturnEmptySuccess",
+      "scanCancellationStopsLaterCallbacksAndPreservesConsumerError",
+      "asyncEntryPointsWithoutUmbrella",
+      "deflateAndCRCCrossChunkBoundaries",
+      "deflateRejectsIncorrectExpandedLength",
+      "asyncURLFormatOverrideMatchesSynchronousDispatch"
+    ]
+  },
+  {
     "feature": "Body, paragraphs, runs, tabs and breaks",
     "status": "supported",
     "tests": [
@@ -13,7 +43,16 @@
     "tests": [
       "formattingAndStyleToggles",
       "eastAsianAndComplexScriptFormatting",
-      "unknownFormattingStaysRaw"
+      "unknownFormattingStaysRaw",
+      "changingCopiedFormattingDoesNotChangeItsSourceOrEmptyDefaults",
+      "mergingFormattingCopiesPreservesToggleRulesAndIndependentArrays",
+      "formattingCopiesCanBeMutatedIndependentlyInConcurrentTasks",
+      "strictUniversalLengthsPreservePointsAcrossTextParagraphsAndSections",
+      "nonfiniteTextMeasuresRemainRawAndDiagnosed",
+      "revisionAndHistoryCopiesKeepIndependentAttributionAndProperties",
+      "invalidBooleanFormattingStaysRawInsteadOfBecomingTrue",
+      "themeColorsTintShadeFontsAndDirectOverrides",
+      "missingThemeAndInvalidTintRemainRawAndWarn"
     ]
   },
   {
@@ -22,15 +61,32 @@
     "tests": [
       "paragraphPaginationProperties",
       "directSpacingPreservesInheritedLineRule",
-      "styleCycleIsRejected"
+      "missingStyleWarningsIdentifyEachReferringPart",
+      "missingBaseStyleWarnsOncePerDeclarationAndRetainsFormatting",
+      "styleCycleIsRejected",
+      "emptyParagraphTypographyAndMarkPropertiesRemainSeparateFromRuns"
     ]
   },
   {
     "feature": "Tables, nesting, merges, widths and borders",
-    "status": "supported",
+    "status": "partial",
     "tests": [
       "tablesMergesAndNestedContent",
-      "libreOfficeProducerParity"
+      "libreOfficeProducerParity",
+      "preferredTableAndCellWidthsNormalizeUnitsAndKeepSource",
+      "automaticNoneAndUnknownWidthUnitsAreNotInvented",
+      "invalidPhysicalWidthsDoNotBecomeMissingSuccess",
+      "invalidSpansDoNotBecomeOne",
+      "missingPreviousPropertiesDoNotBecomeEmptyFormatting",
+      "conditionalTableStylePrecedenceAndDirectFormatting",
+      "tableLookMaskBandSizesAndNestedContexts",
+      "wordTableAppearanceUsesPointsAndRetainsLogicalEdges",
+      "tableBordersAndMarginsMergePerEdgeThroughConditionalStyles",
+      "previousTableAppearanceAndGridPositionsFollowTheRevisionView",
+      "invalidBorderValuesAndForeignEdgesRemainSourceAndWarn",
+      "duplicateTableEdgesAreRejected",
+      "rowTableExceptionsKeepTheirOwnFormerProperties",
+      "tablePropertyTextAndMisplacedHistoryNeverDisappearSilently"
     ]
   },
   {
@@ -38,7 +94,12 @@
     "status": "supported",
     "tests": [
       "numberingDefinitionsAndOverrides",
-      "malformedNumberingIsRejected"
+      "malformedNumberingIsRejected",
+      "pictureListMarkersKeepLazyImageReferencesAndSourceXML",
+      "missingPictureMarkersWarnAndUnknownNumberingPropertiesStayVisible",
+      "invalidNumberingLevelTextIsNeverDefaultedToZero",
+      "invalidParagraphNumberingLevelIsNeverDefaultedToZero",
+      "foreignFontPropertiesCannotImpersonateWordProperties"
     ]
   },
   {
@@ -51,11 +112,26 @@
   },
   {
     "feature": "Fields",
-    "status": "supported",
+    "status": "partial",
     "tests": [
       "simpleAndComplexFields",
       "nestedFields",
-      "incompleteFieldWarnsAndKeepsDisplay"
+      "incompleteFieldWarnsAndKeepsDisplay",
+      "crossParagraphFieldsKeepIdentityAndImmutableScanFragments",
+      "nestedInstructionFieldsStayOutOfCachedDisplay",
+      "nestedResultFieldsContinueAcrossParagraphs",
+      "fieldsCrossControlsTablesAndHyperlinksWithoutMovingContent",
+      "inlineWrapperBoundariesRetainStartEndAndInstructionPhases",
+      "codeOnlyAndSimpleNestedFieldsDoNotInventDisplay",
+      "unclosedFieldsWarnOnlyAtStoryEndWithoutInventingEndMarkers",
+      "notesAndBodyCannotCloseEachOthersFields",
+      "invalidMarkersAndSourceExtensionsRemainDiagnosed",
+      "revisionViewsUseOnlyTheirVisibleFieldMarkers",
+      "textBoxesHaveIndependentFieldsAndResumeTheEnclosingStory",
+      "semanticFieldDepthCannotBypassTheXMLDepthLimit",
+      "strictFieldsAndFormExtensionsKeepTheirSource",
+      "largeCachedFieldStreamsEveryBlockBeforeItsEnd",
+      "missingOrForeignSimpleInstructionsNeverBecomeEmptySuccess"
     ]
   },
   {
@@ -84,10 +160,22 @@
   },
   {
     "feature": "Revisions",
-    "status": "supported",
+    "status": "partial",
     "tests": [
       "revisionViews",
-      "trackedTableRows"
+      "drawingsAndImagesKeepRevisionAttribution",
+      "canvasTextUsesIndependentRevisionViews",
+      "trackedTableRows",
+      "deletedParagraphMarksJoinOnlyFinalView",
+      "insertedParagraphMarksJoinOnlyOriginalView",
+      "formerRunAndParagraphPropertiesFollowRevisionView",
+      "formerTableRowCellAndColumnPropertiesFollowRevisionView",
+      "insertedAndDeletedCellsFollowTheSelectedViewAndKeepAttribution",
+      "trackedMergeUsesContAndRestWithoutInventingAMergeStart",
+      "wrapperRevisionMetadataAndExtensionsRemainAvailable",
+      "paragraphMarkHistoryUsesItsOwnRevisionView",
+      "markExtensionsAndMultipleAnnotationsRemainVisibleWithoutJoining",
+      "malformedFormerPropertiesNeverBecomeUnchangedSuccess"
     ]
   },
   {
@@ -95,7 +183,9 @@
     "status": "supported",
     "tests": [
       "sectionsAndMetadata",
-      "macrosRemainOpaque"
+      "macrosRemainOpaque",
+      "foreignMetadataCannotImpersonateStandardFields",
+      "metadataRootMustMatchItsRelationshipType"
     ]
   },
   {
@@ -108,7 +198,97 @@
     ]
   },
   {
-    "feature": "Content controls, math, shapes, charts, OLE and altChunk",
+    "feature": "Japanese typography and source fonts",
+    "status": "supported",
+    "tests": [
+      "symbolFontsKeepOriginalCharacterCodesAndFontNames",
+      "rubyAndJapaneseParagraphSettingsAreTyped",
+      "fontTableAndThemePreserveSourceDefinitions"
+    ]
+  },
+  {
+    "feature": "DrawingML canvases, groups, shapes and SVG assets",
+    "status": "partial",
+    "tests": [
+      "canvasRetainsGroupsTransformsShapesAndText",
+      "svgIsPreferredAndFallbackAssetsStayLazy",
+      "everyBundledPresetEvaluatesAtMultipleAspectRatios",
+      "presetPathsKeepExplicitExtrusionFlags",
+      "customPathsKeepDimensionsFlagsAndEveryCommand",
+      "malformedGeometryNeverInventsCoordinates",
+      "optionalGeometryExtensionsStayRawAndWarnOnce",
+      "presetExpansionKeepsSourceAndDiagnosesUnknownAdjustments",
+      "drawingNamespacesCannotSupplyForeignPlacementOrShapeProperties",
+      "percentagePlacementAndInvalidFlagsRemainExplicit",
+      "foreignDrawingContainerNeverBecomesAStandardScene",
+      "pictureFillsKeepPreferredSVGAndUnfetchedExternalFallback",
+      "canvasBackgroundAndPatternColorsRemainTyped",
+      "connectorsAndCanvasOutlinesRetainTheirOwnProperties",
+      "mainDrawingConnectorsAndEmptyCanvasFormattingReadWithoutWarnings",
+      "unprojectedCanvasEffectsAndConnectorPropertiesRemainDiagnosed",
+      "malformedConnectorEndpointsNeverBecomeSuccessfulDefaults",
+      "drawingsAndImagesKeepRevisionAttribution",
+      "canvasTextUsesIndependentRevisionViews"
+    ]
+  },
+  {
+    "feature": "Office Math structure",
+    "status": "supported",
+    "tests": [
+      "fractionsRootsAndScriptsRetainTheirArgumentStructure",
+      "matricesDelimitersAndNaryPropertiesDoNotInventLinearNotation",
+      "equationParagraphsAndRelatedStoriesMatchScan",
+      "missingDuplicateAndForeignArgumentsAreRejected",
+      "unknownEquationNodesKeepMixedContentAndWarn",
+      "supportedMathChoiceTakesPrecedenceOverFallbackText"
+    ]
+  },
+  {
+    "feature": "Chart data and source structure",
+    "status": "partial",
+    "tests": [
+      "chartCachesKeepSparseIndicesFormulasAndLexicalValues",
+      "multiLevelCategoriesAndUncachedReferencesRetainTheirSource",
+      "workbookReferencesStayLazyAndExternalTargetsAreNeverFetched",
+      "malformedChartPointsAndAxesThrow",
+      "declaredCountsDoNotAllocateOrFillMissingPoints"
+    ]
+  },
+  {
+    "feature": "On-demand original XML and warning coverage",
+    "status": "supported",
+    "tests": [
+      "originalQualifiedNamesNamespacesAndMixedContentSurvive",
+      "sourceReadingUsesTheOriginalXMLNodeBudget",
+      "sourceReadingRejectsDTDWithoutFetchingEntities",
+      "asyncSourceReadingMatchesSynchronousStructure",
+      "unknownRowAndCellPropertiesWarnAndSurvive",
+      "unequalColumnDetailsAreNeverSilentlyIgnored",
+      "unknownDocumentRootChildrenWarnWithoutChangingBody",
+      "reconstructedXMLUsesTheReservedXMLPrefixForSpace",
+      "propertyContainersAndRecognizedLeavesKeepExtensionsAndWarn",
+      "sectionExtensionsCannotOverwriteStandardGridSettings",
+      "malformedParagraphMeasuresStayRawAndDiagnosed",
+      "historyWarningsCountSourceOccurrencesOnceInEveryView"
+    ]
+  },
+  {
+    "feature": "Content controls",
+    "status": "partial",
+    "tests": [
+      "nestedBlockAndInlineControlsKeepMetadataCachedContentAndTraversal",
+      "checkboxStateNeverSubstitutesItsOriginalSymbolText",
+      "bindingsAndListEntriesStayMetadataWithoutReplacingCachedDisplay",
+      "tableControlsReferencePhysicalRangesWithoutDuplicatingGridContent",
+      "foreignControlPropertiesStaySourceAndWarn",
+      "invalidControlBooleanDoesNotInventAState",
+      "conflictingControlTypesAndDuplicateContentThrow",
+      "crossControlParagraphMarkJoinsAreRetainedAndDiagnosed",
+      "dateAndRepeatingControlsPreserveLocaleSourceAndNestedCachedText"
+    ]
+  },
+  {
+    "feature": "SmartArt, ink, OLE and altChunk",
     "status": "raw",
     "tests": [
       "unknownContentIsRecoverable",
@@ -124,10 +304,49 @@
   },
   {
     "feature": "ODT and Pages reading",
-    "status": "planned",
+    "status": "partial",
     "tests": [
-      "futureCodecsAreNamed",
-      "iWorkSpreadsheetIsNotPages"
+      "odtTextStylesTablesListsAndStories",
+      "odtImagesMetadataAndInspectWithoutBodyParsing",
+      "odtRejectsMalformedCyclesRepetitionAndEncryption",
+      "odtUnknownNamespacesAndCallbacksRemainVisible",
+      "pagesReadsReferencedBodyStylesAndUTF16RangesAcrossChunks",
+      "pagesHeadersAndUnsupportedAttachmentsRemainSeparate",
+      "pagesRejectsDanglingReferencesSurrogatesCyclesAndDuplicates",
+      "pagesInspectLimitsMalformedFramingAndLayoutRecovery",
+      "odtAutomaticStyleScopeAndExplicitBooleanInheritance",
+      "odtLibreOfficeProducerMatchesIndependentOracle",
+      "odtContainerAndInlineExtensionsWarnOncePerSourceOccurrence",
+      "odtUnsupportedFormattingNeverInventsResolvedValues",
+      "odtMalformedListLevelsNeverDefaultToValidNumbering",
+      "odtDuplicateListLevelsAndMalformedNotesThrowEvenWhenStoriesAreOmitted",
+      "odtAutomaticTableStyleIDReferencesItsActualDeclaration",
+      "odtMissingStylesKeepReferenceIDsAndDeclarationSourceParts",
+      "odtInfrastructureExtensionsAndMalformedStatisticsRemainVisible",
+      "pagesNestedExtensionsAndUnsupportedValuesRemainDiagnosed",
+      "pagesTerminalStyleReferencesAreValidatedWithoutDisplayText",
+      "pagesOmittedHeadersStillValidateReferenceTargetsAndPreserveBothRoles",
+      "odtTableStylesResolveGeometryPaddingBordersAndDefaultCells",
+      "odtCoveredCellsRetainSourcePositionsAndHiddenContent",
+      "odtCellPropertiesFallBackIndividuallyThroughRowAndColumnDefaults",
+      "odtRubyKeepsBaseAndAnnotationStylesWithoutDuplicatingDisplayText",
+      "odtRubyRejectsMissingDuplicateAndForeignRequiredChildren",
+      "odtParagraphTabsAndCommentAttributionRemainTyped",
+      "odtUnknownRubyAndTabPropertiesStaySourceAndWarn",
+      "pagesLanguagesFollowUTF16RangesAndResetToStyleDefaults",
+      "pagesNullStyleDeclarationsClearInheritedAndParagraphDefaults",
+      "pagesTabStopsOutlineCapitalizationAndDirectionsAreTyped",
+      "pagesLanguageBoundariesRejectSurrogateSplitsAndOutOfRangeOffsets",
+      "pagesMalformedLanguageAndUnsupportedTabsRemainDiagnosed",
+      "odtCellTextStylesRespectParagraphOverridesAndIndependentNestedStories",
+      "pagesCreatorStudioProducerReadsTablesImagesAndUnicodeInOrder",
+      "pagesSparseTileCellsAndCachedScalars",
+      "pagesDecimalCellsKeepExactCoefficientAndCachedFormulaWarnings",
+      "pagesUnknownCellVersionsKindsAndRichRangesRemainExplicit",
+      "pagesTablesRejectMalformedDimensionsOffsetsPayloadsAndCycles",
+      "pagesMixedTableAndUnknownDrawablesRetainInlineMarkers",
+      "pagesImagesUseMetadataAndKeepAssetCRCChecksLazy",
+      "pagesImagesRejectMissingDuplicateUnsafeResourcesAndBrokenAnchors"
     ]
   },
   {
