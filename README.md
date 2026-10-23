@@ -104,7 +104,7 @@ In an async context Swift selects the async overload, so existing calls may need
 <!-- contract:start -->
 | Feature | Read | API / boundary |
 |---|---|---|
-| Codec selection and content detection | supported | Ordered `formats`, `contains`, `codec(for:)`; consistent Data format overrides, content-detected URLs |
+| Codec selection and content detection | supported | Ordered `formats`, `contains`, `codec(for:)`; consistent Data/URL format overrides, content detection by default |
 | Async and bounded batch reading | supported | read / inspect / asset async overloads; ordered `readAll`, cooperative cancellation; scan remains synchronous |
 | Body, paragraphs, runs, tabs and breaks | supported | `blocks`, `paragraphs`, `runs`, `plainText` |
 | Bold, italic, size, color, East Asian and complex scripts | supported | `TextFormatting`; theme colors, HSL tint/shade and major/minor script fonts resolved; source references retained |
