@@ -12,18 +12,24 @@ public enum DocumentError: Error, Sendable, Equatable, CustomStringConvertible {
     case limitExceeded(String)
     case invalidOptions(String)
     case invalidModel(String)
+    case invalidText(String)
+    case writingNotSupported(DocumentFormat)
+    case writingLoss([WriteWarning])
     public var description: String {
         switch self {
         case .unknownFormat: "The document format could not be determined."
-        case .noCodec(let f): "Reading \(f.rawValue) requires \(f.productName)."
+        case .noCodec(let f): "The \(f.rawValue) format requires \(f.productName)."
         case .unsupportedContainer(let s): "Unsupported container: \(s)"
         case .corruptedPackage(let s): "Corrupted package: \(s)"
         case .invalidXML(let p, let s): "XML parsing failed (\(p)): \(s)"
         case .missingPart(let p): "Missing part: \(p)"
         case .invalidRelationship(let p, let s): "Invalid relationship (\(p)): \(s)"
-        case .limitExceeded(let s): "Reading limit exceeded: \(s)"
-        case .invalidOptions(let s): "Invalid reading options: \(s)"
+        case .limitExceeded(let s): "Document limit exceeded: \(s)"
+        case .invalidOptions(let s): "Invalid document options: \(s)"
         case .invalidModel(let s): "Invalid document model: \(s)"
+        case .invalidText(let s): "Invalid text document: \(s)"
+        case .writingNotSupported(let f): "Writing \(f.rawValue) is not supported by this codec."
+        case .writingLoss(let warnings): "Writing would lose unsupported content (\(warnings.count) warning categories)."
         }
     }
 }
@@ -122,6 +128,7 @@ public protocol DocumentCodec: Sendable {
     func read(_ data: Data, options: ReadOptions) throws -> ReadResult
     func inspect(_ data: Data, limits: PackageLimits) throws -> DocumentSummary
     func scan(_ data: Data, options: ReadOptions, onBlock: (Block) throws -> Void) throws -> ScanResult
+    func write(_ document: Document, options: WriteOptions) throws -> WriteResult
 }
 /// A type-erased, Sendable format codec selected by value.
 public struct Codec: Sendable {
@@ -188,7 +195,8 @@ public struct CodecSet: Sendable {
     }
     public func scan(contentsOf url: URL, format: DocumentFormat? = nil, options: ReadOptions = .init(), onBlock: (Block) throws -> Void) throws -> ScanResult {
         try Task.checkCancellation()
-        return try scan(Data(contentsOf: url, options: .mappedIfSafe), format: format, options: options, onBlock: onBlock)
+        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        return try scan(data, format: urlFormat(url, data: data, explicit: format), options: options, onBlock: onBlock)
     }
 
     /// Read on the generic executor, without occupying the caller's actor.
@@ -228,7 +236,8 @@ public struct CodecSet: Sendable {
     }
     private func readURLSync(_ url: URL, format: DocumentFormat?, options: ReadOptions) throws -> ReadResult {
         try Task.checkCancellation()
-        return try readSync(Data(contentsOf: url, options: .mappedIfSafe), format: format, options: options)
+        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        return try readSync(data, format: urlFormat(url, data: data, explicit: format), options: options)
     }
     private func inspectSync(_ data: Data, format: DocumentFormat?, limits: PackageLimits) throws -> DocumentSummary {
         try Task.checkCancellation()
@@ -242,6 +251,12 @@ public struct CodecSet: Sendable {
     }
     private func inspectURLSync(_ url: URL, format: DocumentFormat?, limits: PackageLimits) throws -> DocumentSummary {
         try Task.checkCancellation()
-        return try inspectSync(Data(contentsOf: url, options: .mappedIfSafe), format: format, limits: limits)
+        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        return try inspectSync(data, format: urlFormat(url, data: data, explicit: format), limits: limits)
+    }
+    private func urlFormat(_ url: URL, data: Data, explicit: DocumentFormat?) -> DocumentFormat? {
+        if let explicit { return explicit }
+        if data.starts(with: [0x50, 0x4B]) || data.starts(with: [0xD0, 0xCF, 0x11, 0xE0]) { return nil }
+        return DocumentFormat(fileExtension: url.pathExtension) == .markdown ? .markdown : nil
     }
 }

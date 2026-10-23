@@ -207,6 +207,12 @@ private final class ODFReader {
                 if let value = get(ODF.style, "text-underline-style") {
                     if ["none", "solid"].contains(value) { f.underline = value == "none" ? "none" : "single" } else { invalid = true }
                 }
+                if let value = get(ODF.style, "text-underline-type") {
+                    if ["none", "single", "double"].contains(value) {
+                        if f.underline == "single" { f.underline = value }
+                        else if f.underline == nil { invalid = true }
+                    } else { invalid = true }
+                }
                 if let value = get(ODF.style, "text-line-through-style") {
                     if ["none", "solid"].contains(value) { f.strike = value != "none" } else { invalid = true }
                 }

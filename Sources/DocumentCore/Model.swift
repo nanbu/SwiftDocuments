@@ -2,14 +2,14 @@ import Foundation
 
 /// A content-detected document format.
 public enum DocumentFormat: String, Sendable, Codable, CaseIterable {
-    case docx, docm, odt, pages
+    case docx, docm, odt, pages, markdown
     /// Standard extension; independent of codec availability and content detection.
-    public var fileExtension: String { rawValue }
+    public var fileExtension: String { self == .markdown ? "md" : rawValue }
     /// Recognize a standard extension case-insensitively, without opening a file.
-    public init?(fileExtension: String) { self.init(rawValue: fileExtension.lowercased()) }
+    public init?(fileExtension: String) { self.init(rawValue: fileExtension.lowercased() == "md" ? "markdown" : fileExtension.lowercased()) }
     /// The independent codec product associated with this format.
     public var productName: String {
-        switch self { case .docx, .docm: "DocumentDOCX"; case .odt: "DocumentODT"; case .pages: "DocumentPages" }
+        switch self { case .docx, .docm: "DocumentDOCX"; case .odt: "DocumentODT"; case .pages: "DocumentPages"; case .markdown: "DocumentMarkdown" }
     }
 }
 

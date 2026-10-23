@@ -1,12 +1,12 @@
 # Public API inventory
 
 Generated from the current compiler symbol graph by `scripts/generate-api-index.py`.
-This lists explicit public declarations in DocumentCore, DocumentDOCX, DocumentODT, DocumentPages and the
+This lists explicit public declarations in DocumentCore, DocumentDOCX, DocumentODT, DocumentPages, DocumentMarkdown and the
 SwiftDocuments umbrella, including convenience extensions and enum cases.
 Compiler-synthesized conformances are omitted. Use the DocC reference for
 parameter documentation and the reading specification for support boundaries.
 
-Explicit public declarations: 1210.
+Explicit public declarations: 1257.
 
 ## Block
 
@@ -431,6 +431,10 @@ init(_ codec: any DocumentCodec)
 ```
 
 ```swift
+static let markdown: Codec
+```
+
+```swift
 static let odt: Codec
 ```
 
@@ -506,6 +510,22 @@ func scan(_ data: Data, format: DocumentFormat? = nil, options: ReadOptions = .i
 
 ```swift
 func scan(contentsOf url: URL, format: DocumentFormat? = nil, options: ReadOptions = .init(), onBlock: (Block) throws -> Void) throws -> ScanResult
+```
+
+```swift
+@concurrent func write(_ document: Document, as format: DocumentFormat? = nil, options: WriteOptions = .init()) async throws -> WriteResult
+```
+
+```swift
+func write(_ document: Document, as format: DocumentFormat? = nil, options: WriteOptions = .init()) throws -> WriteResult
+```
+
+```swift
+@concurrent func write(_ document: Document, to url: URL, as format: DocumentFormat? = nil, options: WriteOptions = .init()) async throws -> WriteResult
+```
+
+```swift
+func write(_ document: Document, to url: URL, as format: DocumentFormat? = nil, options: WriteOptions = .init()) throws -> WriteResult
 ```
 
 ## ColorTransform
@@ -910,6 +930,10 @@ func read(_ data: Data, options: ReadOptions = .init()) throws -> ReadResult
 func scan(_ data: Data, options: ReadOptions = .init(), onBlock: (Block) throws -> Void) throws -> ScanResult
 ```
 
+```swift
+func write(_ document: Document, options: WriteOptions = .init()) throws -> WriteResult
+```
+
 ## Document
 
 ```swift
@@ -1056,6 +1080,22 @@ var theme: DocumentTheme?
 var uninterpretedContent: [UnsupportedContent]
 ```
 
+```swift
+@concurrent func write(as format: DocumentFormat? = nil, options: WriteOptions = .init()) async throws -> WriteResult
+```
+
+```swift
+func write(as format: DocumentFormat? = nil, options: WriteOptions = .init()) throws -> WriteResult
+```
+
+```swift
+@concurrent func write(to url: URL, as format: DocumentFormat? = nil, options: WriteOptions = .init()) async throws -> WriteResult
+```
+
+```swift
+func write(to url: URL, as format: DocumentFormat? = nil, options: WriteOptions = .init()) throws -> WriteResult
+```
+
 ## DocumentCodec
 
 ```swift
@@ -1076,6 +1116,14 @@ func read(_ data: Data, options: ReadOptions) throws -> ReadResult
 
 ```swift
 func scan(_ data: Data, options: ReadOptions, onBlock: (Block) throws -> Void) throws -> ScanResult
+```
+
+```swift
+func write(_ document: Document, options: WriteOptions = .init()) throws -> WriteResult
+```
+
+```swift
+func write(_ document: Document, options: WriteOptions) throws -> WriteResult
 ```
 
 ## DocumentDrawing
@@ -1135,6 +1183,10 @@ case invalidRelationship(part: String, detail: String)
 ```
 
 ```swift
+case invalidText(String)
+```
+
+```swift
 case invalidXML(part: String, detail: String)
 ```
 
@@ -1156,6 +1208,14 @@ case unknownFormat
 
 ```swift
 case unsupportedContainer(String)
+```
+
+```swift
+case writingLoss([WriteWarning])
+```
+
+```swift
+case writingNotSupported(DocumentFormat)
 ```
 
 ## DocumentFont
@@ -1228,6 +1288,10 @@ init?(fileExtension: String)
 
 ```swift
 init?(rawValue: String)
+```
+
+```swift
+case markdown
 ```
 
 ```swift
@@ -2948,6 +3012,32 @@ init(id: String, level: Int = 0)
 var level: Int
 ```
 
+## MarkdownCodec
+
+```swift
+struct MarkdownCodec
+```
+
+```swift
+let format: DocumentFormat
+```
+
+```swift
+init()
+```
+
+```swift
+func inspect(_ data: Data, limits: PackageLimits = .init()) throws -> DocumentSummary
+```
+
+```swift
+func read(_ data: Data, options: ReadOptions = .init()) throws -> ReadResult
+```
+
+```swift
+func scan(_ data: Data, options: ReadOptions = .init(), onBlock: (Block) throws -> Void) throws -> ScanResult
+```
+
 ## NoteReference
 
 ```swift
@@ -3072,6 +3162,10 @@ func read(_ data: Data, options: ReadOptions = .init()) throws -> ReadResult
 func scan(_ data: Data, options: ReadOptions = .init(), onBlock: (Block) throws -> Void) throws -> ScanResult
 ```
 
+```swift
+func write(_ document: Document, options: WriteOptions = .init()) throws -> WriteResult
+```
+
 ## PackageLimits
 
 ```swift
@@ -3174,6 +3268,10 @@ func read(_ data: Data, options: ReadOptions = .init()) throws -> ReadResult
 
 ```swift
 func scan(_ data: Data, options: ReadOptions = .init(), onBlock: (Block) throws -> Void) throws -> ScanResult
+```
+
+```swift
+func write(_ document: Document, options: WriteOptions = .init()) throws -> WriteResult
 ```
 
 ## Paragraph
@@ -5082,4 +5180,102 @@ init?(rawValue: String)
 
 ```swift
 case restart
+```
+
+## WriteOptions
+
+```swift
+struct WriteOptions
+```
+
+```swift
+var compress: Bool
+```
+
+```swift
+init(from decoder: any Decoder) throws
+```
+
+```swift
+init(strict: Bool = false, compress: Bool = true)
+```
+
+```swift
+var strict: Bool
+```
+
+## WriteResult
+
+```swift
+struct WriteResult
+```
+
+```swift
+let data: Data
+```
+
+```swift
+init(data: Data, warnings: [WriteWarning] = [])
+```
+
+```swift
+let warnings: [WriteWarning]
+```
+
+## WriteWarning
+
+```swift
+struct WriteWarning
+```
+
+```swift
+enum Code
+```
+
+```swift
+case flattenedContent
+```
+
+```swift
+init?(rawValue: String)
+```
+
+```swift
+case omittedContent
+```
+
+```swift
+case omittedMetadata
+```
+
+```swift
+case sourcePartsOmitted
+```
+
+```swift
+case unsupportedFormatting
+```
+
+```swift
+var code: WriteWarning.Code
+```
+
+```swift
+var count: Int
+```
+
+```swift
+var element: String
+```
+
+```swift
+init(code: WriteWarning.Code, element: String, message: String, count: Int = 1)
+```
+
+```swift
+init(from decoder: any Decoder) throws
+```
+
+```swift
+var message: String
 ```

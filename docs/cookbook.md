@@ -329,3 +329,30 @@ for table in document.tables {
 ```
 
 Logical start/end and physical left/right edges are separate declarations. Resolve writing direction before choosing an edge for display. Explicit `none`/`nil` borders override inherited style declarations; the reader does not compute conflicts between neighboring borders. Table defaults, conditional cell styles and row table exceptions remain distinguishable. Revision snapshots retain previous borders and margins as well as widths. Covered ODF cells retain their own blocks for source inspection, but their text is excluded from ordinary table text and document paragraph traversal.
+
+## Read Markdown and save a basic document
+
+```swift
+let source = try Document(contentsOf: URL(filePath: "notes.md"))
+let saved = try source.write(to: URL(filePath: "notes.docx"))
+for warning in saved.warnings { print(warning.code, warning.element, warning.count) }
+
+// Plain-text bytes need an explicit format; package detection does not guess text.
+let result = try Document.read(Data("# Notes\n\nA paragraph".utf8), format: .markdown)
+let odt = try await result.document.write(as: .odt)
+```
+
+Writers regenerate packages from the supported model subset. Original parts,
+images, macros, related stories and advanced formatting are not copied. Use
+`WriteOptions(strict: true)` to reject any diagnosed loss before committing a
+file; inspect the returned warnings for ordinary writes. Saving to an extension
+selects that codec unless `as:` is explicit. The source format is the next
+fallback, so Markdown input needs an explicit format or a supported destination
+extension for writing. Markdown export is not yet implemented.
+
+DOCX/DOCM and ODT write basic formatting, simple lists, external hyperlinks,
+unmerged tables and basic metadata. Pages currently writes body text only,
+including Japanese/emoji, tabs and line/page breaks; tables and links become text
+with warnings. A required final paragraph is added to Word cells ending in a
+nested table, with a warning. ODT inline page/column breaks become line breaks,
+and nested list levels become ordinary paragraphs, with warnings.

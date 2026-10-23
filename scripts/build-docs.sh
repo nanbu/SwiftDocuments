@@ -23,14 +23,14 @@ mkdir -p "$graph_path"
 # satisfying the reference checks after a toolchain change.
 find "$graph_path" -name '*.symbols.json' -delete
 sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
-for module in DocumentCore DocumentDOCX DocumentODT DocumentPages SwiftDocuments; do
+for module in DocumentCore DocumentDOCX DocumentODT DocumentPages DocumentMarkdown SwiftDocuments; do
     xcrun swift-symbolgraph-extract \
         -module-name "$module" \
         -target "$(uname -m)-apple-macosx14.0" \
         -sdk "$sdk_path" \
         -I "$module_path" \
         -Xcc "-fmodule-map-file=$PWD/Sources/CDocumentZlib/module.modulemap" \
-        -experimental-allowed-reexported-modules=DocumentCore,DocumentDOCX,DocumentODT,DocumentPages \
+        -experimental-allowed-reexported-modules=DocumentCore,DocumentDOCX,DocumentODT,DocumentPages,DocumentMarkdown \
         -minimum-access-level public \
         -omit-extension-block-symbols \
         -output-dir "$graph_path"

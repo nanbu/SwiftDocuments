@@ -3,13 +3,18 @@ import SwiftDocuments
 
 do {
     let args = Array(CommandLine.arguments.dropFirst())
-    guard args.count == 2, ["text", "inspect", "scan", "read"].contains(args[0]) else {
-        print("Usage: swiftdoc text|inspect|scan|read document.docx")
+    guard (args.count == 2 && ["text", "inspect", "scan", "read"].contains(args[0])) || (args.count == 3 && args[0] == "convert") else {
+        print("Usage: swiftdoc text|inspect|scan|read document\n       swiftdoc convert input-document output.docx|docm|odt|pages")
         exit(2)
     }
     let url = URL(fileURLWithPath: args[1])
     let start = ContinuousClock.now
     switch args[0] {
+    case "convert":
+        let input = try Document.read(contentsOf: url)
+        let output = try input.document.write(to: URL(fileURLWithPath: args[2]))
+        for warning in input.warnings { FileHandle.standardError.write(Data("Read warning: \(warning.element) (\(warning.count)): \(warning.message)\n".utf8)) }
+        for warning in output.warnings { FileHandle.standardError.write(Data("Write warning: \(warning.element) (\(warning.count)): \(warning.message)\n".utf8)) }
     case "inspect":
         let summary = try Document.inspect(contentsOf: url)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

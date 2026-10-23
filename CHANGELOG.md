@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.1.0 — 2026-10-23
+
+- Add the independent `DocumentMarkdown` UTF-8 subset reader with explicit Data
+  format selection, extension-based text URL selection, limits and warnings.
+- Add sync/async `Document.write` and `CodecSet.write`, atomic file saves,
+  `WriteOptions`, `WriteResult`, aggregated writing losses and strict checks.
+- Generate basic DOCX/DOCM/ODT packages with paragraphs, basic formatting,
+  simple lists, links, tables and metadata. Generate modern Pages body text
+  using a sanitized producer-created blank template with retained provenance.
+- Add `swiftdoc convert input output` and independent package/LibreOffice
+  verification tooling. Markdown writing and lossless package editing remain
+  deferred. Original assets, macros and advanced content are not copied.
+- Read ODT single/double underline types alongside their explicit styles.
+
+Compatibility note: `DocumentFormat.markdown` and new `DocumentError` cases
+require consumers with exhaustive switches to add cases or a default branch.
+Existing reading-only custom codecs retain source compatibility through the
+default writing implementation.
+
 ## 1.0.0
 
 The first stable release of SwiftDocuments' documented reading API.

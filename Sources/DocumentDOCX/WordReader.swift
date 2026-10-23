@@ -1,7 +1,7 @@
 import Foundation
 import DocumentCore
 
-/// The read-only OPC / WordprocessingML codec for DOCX or DOCM.
+/// The OPC / WordprocessingML reading and basic writing codec for DOCX or DOCM.
 public struct DOCXCodec: DocumentCodec {
     /// The selected Word package format: DOCX or macro-enabled DOCM.
     public let format: DocumentFormat

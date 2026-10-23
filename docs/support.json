@@ -350,7 +350,42 @@
     ]
   },
   {
-    "feature": "Writing, conversion and layout",
+    "feature": "Markdown reading",
+    "status": "partial",
+    "tests": [
+      "markdownHeadingsParagraphsAndUnicode",
+      "markdownEmphasisCodeLinksAndEscapes",
+      "markdownNestedEmphasisAndLiteralImageSource",
+      "markdownListsAndHardBreaks",
+      "markdownFencesRetainLiteralCode",
+      "markdownUnsupportedSourceAndScanParity",
+      "markdownEncodingLimitsAndNoTextGuessing",
+      "markdownURLSelectionAndPackageSignaturePrecedence",
+      "markdownAsyncAndCancellation"
+    ]
+  },
+  {
+    "feature": "Basic writing and conversion",
+    "status": "partial",
+    "tests": [
+      "basicWritingRoundTrip",
+      "writingODTMimetypeAndZIPDeterminism",
+      "writingEmptyDocument",
+      "writingPagesUnicodeParagraphsAndControls",
+      "writingNestedTablesAndWhitespace",
+      "writingWordAddsAndDiagnosesRequiredCellTerminator",
+      "writingLossWarningsAndStrictDestinationSafety",
+      "writingPagesLossesAndMacroOmission",
+      "writingFormatSelectionAndReadOnlyCodecCompatibility",
+      "writingInvalidValuesAreRejected",
+      "writingAsyncAndCancellationPreserveDestination",
+      "odtDoubleUnderlineAndUnknownTypes",
+      "writingNestedLinksAndDeepCachedFieldsAreBounded",
+      "customReadingOnlyCodecRetainsDefaultWritingFailure"
+    ]
+  },
+  {
+    "feature": "Markdown writing and layout",
     "status": "planned",
     "tests": []
   }

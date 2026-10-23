@@ -46,6 +46,6 @@ Sources:
 - [iWorkFileFormat](https://github.com/obriensp/iWorkFileFormat): IWA analysis and Protobuf descriptions.
 - [python-pages investigation](https://github.com/isoparametric/python-pages/blob/main/REPORT.md): TP.DocumentArchive and storage analysis.
 
-## Before writing support
+## Basic writing
 
-Current APIs are read-only. A writer requires a separate preservation contract for relationship IDs, style IDs and opaque parts. Conversions should combine reading warnings and writing losses in one result, following SwiftSheets' approach.
+Basic writers regenerate packages from the model and return explicit writing losses. They do not promise preservation of relationship/style IDs or opaque parts. `ReadResult.warnings` and `WriteResult.warnings` remain separate; the CLI reports both during conversion. Pages patches a sanitized blank producer graph for body text only. `DocumentMarkdown` projects the documented UTF-8 subset to the same shared model. See the canonical specification for selection, atomic saving and strict-loss semantics.

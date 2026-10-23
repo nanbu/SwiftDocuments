@@ -3,10 +3,11 @@ import Foundation
 @_exported import DocumentDOCX
 @_exported import DocumentODT
 @_exported import DocumentPages
+@_exported import DocumentMarkdown
 
 extension CodecSet {
     /// All currently implemented reading codecs.
-    public static let all = CodecSet([.docx, .docm, .odt, .pages])
+    public static let all = CodecSet([.docx, .docm, .odt, .pages, .markdown])
 }
 extension Document {
     /// Read a local package, detecting its contents unless a format is selected.
@@ -66,5 +67,24 @@ extension Document {
     /// A failure cancels and awaits remaining children; no partial batch is returned.
     @concurrent public static func readAll(contentsOf urls: [URL], options: ReadOptions = .init(), maxConcurrentReads: Int = 4) async throws -> [ReadResult] {
         try await CodecSet.all.readAll(contentsOf: urls, options: options, maxConcurrentReads: maxConcurrentReads)
+    }
+}
+
+extension Document {
+    /// Generate bytes in the selected format, retaining diagnosed writing losses.
+    public func write(as format: DocumentFormat? = nil, options: WriteOptions = .init()) throws -> WriteResult {
+        try CodecSet.all.write(self, as: format, options: options)
+    }
+    /// Serialize completely, then atomically replace a local destination.
+    public func write(to url: URL, as format: DocumentFormat? = nil, options: WriteOptions = .init()) throws -> WriteResult {
+        try CodecSet.all.write(self, to: url, as: format, options: options)
+    }
+    /// Generate bytes on the generic executor.
+    @concurrent public func write(as format: DocumentFormat? = nil, options: WriteOptions = .init()) async throws -> WriteResult {
+        try await CodecSet.all.write(self, as: format, options: options)
+    }
+    /// Serialize and atomically save on the generic executor.
+    @concurrent public func write(to url: URL, as format: DocumentFormat? = nil, options: WriteOptions = .init()) async throws -> WriteResult {
+        try await CodecSet.all.write(self, to: url, as: format, options: options)
     }
 }

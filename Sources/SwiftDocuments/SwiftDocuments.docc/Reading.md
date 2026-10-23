@@ -12,6 +12,18 @@ The umbrella and ``CodecSet`` accept the same optional `format` override for Dat
 
 `Document.inspect(contentsOf:format:limits:)` returns ``DocumentSummary`` without parsing the body. Expanded sizes are ZIP declarations. Metadata and necessary package infrastructure are inflated and checked; Word/ODT body and image CRCs are not checked by inspection. Pages inspection inflates its root IWA part for identification, but does not interpret all body objects.
 
+## Markdown input
+
+`DocumentMarkdown` reads the documented UTF-8 subset. Data entry points require
+`format: .markdown`; plain text is never guessed by package detection. URL
+entry points select `.md` / `.markdown` when no ZIP/OLE signature is present.
+Headings, paragraphs, simple lists, strong/emphasis, inline code/links and fenced
+code project to the shared model. Unsupported constructs remain literal source
+with warnings. Inspection validates encoding and byte limits without parsing
+body blocks; its metadata and package inventory are empty. Markdown scanning is
+buffered and uses the existing byte/depth/work limits. See <doc:Cookbook> for
+basic writing and conversion.
+
 ## Async reading and batches
 
 Read / inspect / asset have same-named async overloads running on the generic executor, including from MainActor. The synchronous codec protocol, methods and initializers remain available. In an async context existing calls may need `await`. File I/O remains synchronous; this API does not promise a speed improvement or asynchronous disk I/O.
@@ -24,7 +36,7 @@ Cancellation is checked around dispatch, file reads, ZIP entries, inflation / CR
 
 ``Document/scan(contentsOf:format:options:onBlock:)`` calls the synchronous throwing callback once per top-level body block in order. The result retains styles, sections, metadata, warnings and requested related stories, but no body blocks. A callback error propagates unchanged. A later XML error can be thrown after earlier callbacks have already run, so callers must handle partial effects.
 
-Word scanning releases each body-block XML tree; ODT retains the content XML tree and Pages retains the decoded object graph. All formats retain ZIP input; it is not constant-memory streaming. A large table remains one block. Set `includeRelatedStories` to false when those bodies are unnecessary; the result reports `storiesOmitted` when appropriate.
+Word scanning releases each body-block XML tree; ODT retains the content XML tree and Pages retains the decoded object graph. Package formats retain ZIP input; Markdown retains normalized source text; it is not constant-memory streaming. A large table remains one block. Set `includeRelatedStories` to false when those bodies are unnecessary; the result reports `storiesOmitted` when appropriate.
 
 ## Warnings, limits and assets
 

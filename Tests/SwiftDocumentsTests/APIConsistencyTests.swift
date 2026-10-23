@@ -37,7 +37,7 @@ private struct APIProbeCodec: DocumentCodec {
         #expect(try CodecSet([selected]).inspect(Data(), format: .pages).metadata.title == "last")
         #expect(CodecSet([]).formats.isEmpty)
         #expect(throws: DocumentError.noCodec(.odt)) { try set.codec(for: .odt) }
-        #expect(CodecSet.all.formats == [.docx, .docm, .odt, .pages])
+        #expect(CodecSet.all.formats == [.docx, .docm, .odt, .pages, .markdown])
     }
 
     @Test func explicitDataFormatAndOptionsReachEveryOperation() throws {
@@ -56,6 +56,10 @@ private struct APIProbeCodec: DocumentCodec {
         #expect(throws: DocumentError.noCodec(.pages)) { try CodecSet([.docx]).scan(Data(), format: .pages) { _ in } }
     }
 
+    @Test func customReadingOnlyCodecRetainsDefaultWritingFailure() throws {
+        let set = CodecSet([Codec(APIProbeCodec(format: .pages, marker: "read-only"))])
+        #expect(throws: DocumentError.writingNotSupported(.pages)) { try set.write(Document(), as: .pages) }
+    }
     @Test func facadeFormatOverrideValidatesMIME() throws {
         let macro = try fixture("macro.docm")
         let error = DocumentError.corruptedPackage("codec / MIME mismatch")

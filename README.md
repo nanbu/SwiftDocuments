@@ -2,11 +2,11 @@
 
 A modern Swift document library built around a **format-neutral value model and one codec per format**, following SwiftSheets.
 
-**Version 1.0:** A reading library for DOCX and DOCM, with partial ODT and modern Pages codecs. The documented public API follows semantic versioning. See the support boundaries below; Pages producer verification covers the fictional import/save fixture described below.
+**Version 1.1:** DOCX/DOCM reading, partial ODT/modern Pages reading, UTF-8 Markdown subset reading, and basic DOCX/DOCM/ODT/Pages writing. The documented public API follows semantic versioning. See the support boundaries below; Pages producer verification covers the fictional import/save fixture described below.
 
 Swift 6.2+, macOS 14+ and iOS 17+. Uses Foundation / FoundationXML and system zlib, with no external Swift package dependencies.
 
-[API reference](https://nanbu.github.io/SwiftDocuments/) · [API inventory](docs/api-reference.md) · [Executable example](Examples/ReadDocument) · [Cookbook](docs/cookbook.md) · [Reading specification](docs/implementation-spec.md) · [Format design](docs/format-design.md)
+[API reference](https://nanbu.github.io/SwiftDocuments/) · [API inventory](docs/api-reference.md) · [Executable example](Examples/ReadDocument) · [Cookbook](docs/cookbook.md) · [Reading and writing specification](docs/implementation-spec.md) · [Format design](docs/format-design.md)
 
 ```swift
 import Foundation
@@ -33,7 +33,7 @@ Add the versioned package with Swift Package Manager:
 ```swift
 // Package.swift
  dependencies: [
-    .package(url: "https://github.com/nanbu/SwiftDocuments.git", from: "1.0.0")
+    .package(url: "https://github.com/nanbu/SwiftDocuments.git", from: "1.1.0")
  ],
  targets: [
     .target(name: "App", dependencies: [
@@ -54,7 +54,7 @@ let result = try codecs.read(contentsOf: url)
 print(result.document.plainText, result.warnings)
 ```
 
-Link `DocumentODT` with `DocumentCore` and select `CodecSet([.odt])`, or link `DocumentPages` with `DocumentCore` and select `CodecSet([.pages])`. The umbrella re-exports all four modules and registers all four formats.
+Link `DocumentODT` with `DocumentCore` and select `CodecSet([.odt])`, or link `DocumentPages` with `DocumentCore` and select `CodecSet([.pages])`. Link `DocumentMarkdown` with `DocumentCore` and select `CodecSet([.markdown])` for Markdown. The umbrella re-exports Core and all four codec modules and registers five formats.
 
 The models are `Sendable` value types. Synchronous methods remain available; async read / inspect / asset methods run on the generic executor so callers can await them from MainActor. Each operation owns its parsing state. Cancellation is cooperative; file I/O itself remains synchronous.
 
@@ -70,7 +70,7 @@ The models are `Sendable` value types. Synchronous methods remain available; asy
 | `document.asset(at:)` | Original bytes of an image or opaque part, inflated and CRC-checked on demand |
 | `document.readSourceXML(at:)` | Original XML names, namespace scopes, attributes and ordered mixed content; parsed on demand with the original limits |
 
-URL and Data inputs are supported. Detection reads package contents rather than trusting the extension. All Data and URL initializers and read / inspect / scan entry points accept an optional `format` override; the selected codec still validates the contents. `DocumentFormat(fileExtension:)` recognizes standard extensions for explicit selection without changing detection.
+URL and Data inputs are supported. Package detection reads contents rather than trusting the extension. Plain-text Markdown Data requires explicit `format: .markdown`; URL inputs use `.md` / `.markdown` when no ZIP/OLE signature is present. All Data and URL initializers and read / inspect / scan entry points accept an optional `format` override; the selected codec still validates the contents. `DocumentFormat(fileExtension:)` recognizes standard extensions for explicit selection without changing detection.
 
 `CodecSet` exposes the same operations and accepts custom `DocumentCodec` implementations. `formats`, `contains(_:)`, `codec(for:)` and `Codec.format` expose registration. Formats keep first registration order; re-registration replaces the implementation with the last choice. Missing codecs throw `DocumentError.noCodec`.
 
@@ -98,6 +98,50 @@ print(result.warnings, batch.map { $0.document.plainText })
 ```
 
 In an async context Swift selects the async overload, so existing calls may need `await`. Scan stays synchronous and accepts caller-owned callback state. A batch failure cancels and awaits remaining children before throwing, without returning partial results. The concurrent-read limit must be positive and applies to active documents, not the memory of the full result. Cancellation may stop a scan after earlier callbacks; consumer errors retain precedence.
+
+## Markdown and basic writing
+
+```swift
+let markdown = try Document.read(Data("# Notes\n\n**Hello** 日本語".utf8), format: .markdown)
+let saved = try markdown.document.write(to: URL(filePath: "notes.docx"))
+print(saved.warnings)
+
+var draft = Document()
+var paragraph = Paragraph()
+paragraph.inlines = [.text(TextRun("A new document"))]
+draft.blocks = [.paragraph(paragraph)]
+let bytes = try draft.write(as: .odt, options: WriteOptions(strict: true))
+```
+
+`write(as:options:)` returns generated bytes and aggregated `WriteWarning`s.
+`write(to:as:options:)` serializes and validates the complete model before an
+atomic local save. An explicit format wins; otherwise a recognized output
+extension wins, followed by the source format, then DOCX for a new document.
+Sync and async overloads are available. Custom reading-only codecs continue to
+compile and throw `writingNotSupported` for writes by default.
+
+DOCX/DOCM and ODT writing covers paragraphs, basic text formatting, outline
+levels/alignment, simple lists, external links, unmerged tables and basic
+metadata. Pages writing covers body text, paragraphs, Unicode, tabs and line/page
+breaks using a sanitized blank producer template. It projects tables/links and
+formatting to text with warnings. Basic writing regenerates packages; it does
+not preserve source assets, VBA, signatures, unknown XML, stories, revisions or
+advanced layout. `strict: true` refuses any diagnosed writing loss before saving.
+Imported package parts also produce an explicit regeneration warning. A bounded iterative preflight rejects body graphs beyond 32 structural levels or 2,000,000 visited nodes before recursive serialization. Reading
+warnings remain on the source document and are diagnosed by writing separately.
+
+Markdown is a documented subset, not a CommonMark/GFM conformance claim. Images,
+HTML, reference links, tables, quotes and complex lists remain literal text with
+warnings. Markdown export is deferred; `write(as: .markdown)` throws
+`writingNotSupported`. See the [specification](docs/implementation-spec.md) for
+per-format limitations, including ODT break/list fallback and required Word cell
+terminators.
+
+```sh
+swift run swiftdoc convert notes.md notes.docx
+swift run swiftdoc convert notes.md notes.odt
+swift run swiftdoc convert notes.md notes.pages
+```
 
 ## Support
 
@@ -128,7 +172,9 @@ In an async context Swift selects the async overload, so existing calls may need
 | SmartArt, ink, OLE and altChunk | raw | Display content / raw XML / original parts and warnings; no behavioral or rendering implementation |
 | Legacy DOC and encrypted documents | refused | OLE containers rejected; no exact distinction between legacy DOC and encrypted DOCX |
 | ODT and Pages reading | partial | `DocumentODT` / `DocumentPages`, `.odt` / `.pages`; ODF text/styles/table geometry/covered cells/ruby/images/stories; IWA text/styles/languages/tabs/header-footer, anchored tables and lazy inline images; complex Pages layout remains opaque |
-| Writing, conversion and layout | planned | Outside the current API |
+| Markdown reading | partial | `DocumentMarkdown`, `.markdown`; headings, paragraphs, strong/emphasis, inline links/code, simple lists and fenced code; unsupported constructs remain literal source with warnings |
+| Basic writing and conversion | partial | `document.write`, `CodecSet.write`, `WriteResult`, strict loss checks; DOCX/DOCM/ODT basic text, formatting, lists and tables; Pages body text only; original assets, macros and advanced semantics are omitted with warnings |
+| Markdown writing and layout | planned | Markdown export, pagination and rendering are outside the current API |
 <!-- contract:end -->
 
 `partial` identifies a typed projection with additional uninterpreted semantics. `supported` means the stated API and boundary, not every element of ECMA-376. Unknown content and uninterpreted formatting produce warnings; original package parts remain accessible. Warnings are aggregated by code / part / element with an occurrence `count`. Raw XML is a namespace-preserving reconstruction, not a byte-identical copy.
@@ -148,6 +194,7 @@ python3 scripts/check-contract.py
 python3 scripts/check-public-content.py
 swift run swiftdoc text sample.docx
 swift run swiftdoc inspect sample.docx
+python3 scripts/verify-basic-writing.py --soffice /path/to/soffice
 ```
 
 See [performance and reproduction](docs/performance.md), [contributing](CONTRIBUTING.md) and [security](SECURITY.md). MIT License.

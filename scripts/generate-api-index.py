@@ -21,7 +21,7 @@ def generate(graph):
         groups.setdefault(path[0], []).append((path, declaration, symbol['identifier']['precise']))
     out = ['# Public API inventory', '',
            'Generated from the current compiler symbol graph by `scripts/generate-api-index.py`.',
-           'This lists explicit public declarations in DocumentCore, DocumentDOCX, DocumentODT, DocumentPages and the',
+           'This lists explicit public declarations in DocumentCore, DocumentDOCX, DocumentODT, DocumentPages, DocumentMarkdown and the',
            'SwiftDocuments umbrella, including convenience extensions and enum cases.',
            'Compiler-synthesized conformances are omitted. Use the DocC reference for',
            'parameter documentation and the reading specification for support boundaries.', '',

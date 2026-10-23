@@ -16,6 +16,16 @@ func odtPackage(_ body: String, styles: String = "", automatic: String = "", ext
     return makeZIP(entries + extras)
 }
 @Suite struct ODTTests {
+    @Test func odtDoubleUnderlineAndUnknownTypes() throws {
+        for (kind, expected, warned) in [("single", "single", false), ("double", "double", false), ("none", "none", false), ("alien", "single", true)] {
+            let style = "<style:style style:name=\"U\" style:family=\"text\"><style:text-properties style:text-underline-style=\"solid\" style:text-underline-type=\"\(kind)\"/></style:style>"
+            let data = odtPackage("<text:p><text:span text:style-name=\"U\">Text</text:span></text:p>", automatic: style)
+            let result = try Document.read(data)
+            #expect(result.document.paragraphs[0].runs[0].formatting.underline == expected)
+            #expect(result.warnings.isEmpty != warned)
+            #expect(try Document.scan(data) { _ in }.warnings == result.warnings)
+        }
+    }
     @Test func odtContainerAndInlineExtensionsWarnOncePerSourceOccurrence() throws {
         let body = """
         <text:p x:setting="source">A<text:span x:flag="true">B</text:span><text:tab><x:extra/></text:tab></text:p>

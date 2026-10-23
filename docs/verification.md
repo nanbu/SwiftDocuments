@@ -34,3 +34,25 @@ ODF contract regressions also cover container/inline/table extensions counted on
 Table-reading regressions also cover Strict/Transitional border units and logical edges, independent style-edge overrides, original-view grid positions, row-level table exception history, invalid/foreign extensions and duplicate-edge rejection. ODF fixtures exercise row/column/cell style fallback per property, cell text/paragraph precedence and independent nested-table/note contexts, repeated columns, physical covered cells, ruby base/annotation separation, tabs and comment attribution. Pages wire fixtures check UTF-16 language ranges, explicit inherited-property resets, tabs, outline levels and writing direction. These formatting fixtures are independently constructed synthetic source packages. The separate Pages producer fixture verifies only its documented import/save path.
 
 Pages attachment regressions also exercise sparse and wide tile offsets, exact decimal coefficients, unsupported cell versions/kinds/ranges, mixed text/table markers, cyclic rich-cell graphs, table work/depth limits, invalid resource mappings and deferred image CRC failures. The public-content audit decompresses IWA streams so Snappy compression cannot hide local paths.
+
+## Basic writing and Markdown verification
+
+Run the baseline tests/release build and `scripts/verify-basic-writing.py` with a
+built CLI. With `--soffice`, the script independently opens generated DOCX,
+DOCM and ODT in LibreOffice and checks Japanese/emoji, text, list items and code.
+It also checks ZIP CRCs, generated XML, macro-enabled MIME without fabricated VBA,
+and the first stored ODT mimetype entry. It uses fictional input in a temporary
+directory and installs no producer output into this repository.
+
+Swift tests independently construct Markdown source and model values, checking
+headings, emphasis/links/code/lists, unsupported literal source, UTF-8 and parser
+limits, read/scan parity, format selection, nested tables, default typography,
+loss aggregation, strict failures and cancellation before saving. Markdown is a
+subset; no CommonMark or GFM conformance is inferred.
+
+The modern Pages body-text writer was opened in Pages Creator Studio 15.4 on
+macOS on 2026-10-23. The generated fictional probe displayed Japanese, emoji,
+paragraphs and a hard line break. This verifies that body-text output path only;
+Pages formatting, tables, links and metadata are not native writing support.
+The sanitized blank template and its generation instructions are retained in
+`Sources/DocumentPages/Resources` and `scripts/prepare-pages-template.py`.

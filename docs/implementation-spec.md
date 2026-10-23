@@ -1,4 +1,82 @@
-# Reading specification
+# Reading and writing specification
+
+## Version 1.1 basic writing and Markdown
+
+`DocumentMarkdown` is an independent codec product, re-exported by the umbrella.
+`DocumentFormat.markdown` uses the canonical extension `md`; `markdown` is an
+accepted extension alias. Markdown bytes require explicit `.markdown` selection
+because plain text cannot be distinguished reliably from other text formats.
+URL entry points select Markdown for `.md` / `.markdown` only when the input is
+not a ZIP or OLE container; package signatures retain content-based detection.
+`DocumentFormat.detect(Data)` continues to reject unidentifiable text.
+
+Markdown input is strict UTF-8 (optional BOM), normalizing CRLF/CR to LF. The
+initial subset covers ATX/setext headings (zero-based `outlineLevel`), paragraphs,
+soft breaks as spaces, hard breaks, bullet/decimal single-paragraph list items,
+backtick/tilde fenced code, inline code, backslash escapes, strong/emphasis and
+inline links. Code uses the semantic style ID `MarkdownCode` (block) or
+`MarkdownCodeSpan` (run) with a monospace font. These reserved style IDs are
+portable hints, not Word XML names. Nested/multiblock lists, quotes, rules,
+images, HTML, reference links, tables and extensions are retained as literal
+source with aggregated warnings when recognized; there is no CommonMark/GFM
+conformance claim; [CommonMark 0.31.2](https://spec.commonmark.org/0.31.2/) is a syntax reference, not a conformance assertion. Code fence language hints warn when discarded. HTML is never
+executed, and no link or image resource is fetched. Empty Markdown has no blocks;
+invalid UTF-8 or NUL throws `invalidText`. The existing byte, depth and node
+limits bound Markdown input and parser/model work; scan and read warnings match.
+Inspection validates encoding/byte limits without parsing body blocks and returns
+an empty package inventory and metadata. Scan remains synchronous and buffered.
+
+`DocumentCodec.write(_:options:)` has a default implementation throwing
+`writingNotSupported` so existing third-party reading codecs remain compatible.
+`CodecSet.write(_:as:options:)` and `write(_:to:as:options:)` return `WriteResult`
+with bytes and aggregated `WriteWarning`s. The umbrella adds matching instance
+methods on `Document`. Sync and `@concurrent` async variants have identical
+semantics. Data writes choose explicit format, then `sourceFormat`, then DOCX.
+URL writes choose explicit format, then recognized destination extension, then
+the Data fallback. A missing codec throws `noCodec`. URL writes require a file
+URL, serialize and validate first, then atomically replace the destination;
+serialization, strict-loss and cancellation failures before commit leave it intact.
+
+`WriteOptions(strict:compress:)` defaults to false/true. `strict` throws
+`writingLoss` when any writing warning exists, before committing a file.
+Compression applies to ZIP parts; ODT always stores `mimetype` first without
+compression or extra fields, following [ODF 1.3 package rules](https://docs.oasis-open.org/office/OpenDocument/v1.3/OpenDocument-v1.3-part2-packages.html). ZIP32 output is deterministic and rejects sizes or
+entry counts requiring ZIP64. Cancellation propagates unchanged.
+Before recursive serialization or text projection, an iterative preflight bounds
+the written body graph to 32 nested structural levels and 2,000,000 visited nodes,
+including cached fields, controls, drawing text and equations. Exceeding this
+basic-writer boundary throws `invalidModel`, rather than overflowing the call stack.
+
+Basic writers generate new packages from the model; they do not patch original
+XML or preserve unknown parts, revisions, macros, signatures or embedded assets.
+DOCX/DOCM and ODT write paragraphs, tabs/breaks, bold/italic/strike/underline,
+font name/size/RGB color, paragraph alignment/outline level, simple numbering,
+external hyperlinks, rectangular unmerged tables (including nested tables), and title,
+subject, creator, description and keywords metadata. DOCM uses the macro-enabled
+main-part MIME but never invents or copies VBA. Invalid supported model values
+throw `invalidModel`; unsupported semantics are flattened/omitted with warnings.
+Resolved formatting is written directly; source style definitions are not copied. Nested links are flattened with warnings, and bookmark anchors are diagnosed because bookmarks are not reconstructed.
+Nonrectangular/merged tables are projected to ordinary cells with diagnostics.
+Word cells require a final paragraph: when nonempty cell content ends in a table,
+the writer appends an empty paragraph and diagnoses the added boundary. Empty
+cells receive an empty paragraph without a loss warning. Paragraph default text
+formatting uses generated paragraph styles, separately from mark typography.
+ODT inline page/column breaks become line breaks with warnings. ODT nested list
+levels are flattened with warnings in this first writer. ODT reading recognizes
+`style:text-underline-type` single/double/none alongside explicit solid/none underline style;
+unsupported values remain warned properties.
+
+Pages basic writing patches a sanitized, producer-created blank modern Pages
+template with body text. Paragraphs, tabs, line/page breaks and Unicode are
+supported; other content is projected to text with warnings. Formatting, tables,
+lists, links and metadata are not claimed as native Pages writing support.
+The template generation/sanitation script and provenance are retained. Producer
+verification is recorded separately from synthetic self-read tests.
+
+Markdown writing is a subsequent milestone; selecting it for writing currently
+throws `writingNotSupported`. Layout, pagination and lossless round-trip editing
+remain outside the basic writing contract. Public documentation must distinguish
+this subset from the substantially broader reading contract below.
 
 ## Goal and completion boundary
 
@@ -6,11 +84,11 @@ Apply SwiftSheets' design principles to documents: Swift 6.2+, `Sendable` value 
 
 ## Modules and extension points
 
-`DocumentCore` owns the format-neutral document, block, paragraph, inline, table, style, numbering, story, section and metadata models; `DocumentCodec` / `CodecSet`; and shared ZIP / XML infrastructure. `DocumentDOCX` implements DOCX / DOCM. `SwiftDocuments` re-exports Core and all three codecs and adds convenience entry points. Linking only Core and selected codecs uses the same model.
+`DocumentCore` owns the format-neutral document, block, paragraph, inline, table, style, numbering, story, section and metadata models; `DocumentCodec` / `CodecSet`; and shared ZIP / XML infrastructure. `DocumentDOCX` implements DOCX / DOCM. `SwiftDocuments` re-exports Core and all four codec modules and adds convenience entry points. Linking only Core and selected codecs uses the same model.
 
 The internal system-zlib target/module is `CDocumentZlib`, with no public product. Its package-specific name allows an application to depend on SwiftDocuments alongside another package declaring `CZlib`. Shared public names such as `CodecSet`, `ReadOptions` and `TextRun` are qualified by module when importing multiple document libraries. `scripts/check-companion-apis.py --sheets <checkout> --slides <checkout>` builds and runs independent two-package consumers; it does not claim that the two companion packages can be linked to each other.
 
-`DocumentODT` projects ODF content.xml / styles.xml onto the model. `DocumentPages` interprets modern IWA object graphs. Pages layout canvases must not be forced into Word's page semantics. Positioned and unknown content retains source parts and raw representations. Writing, conversion, layout and encryption are outside this milestone.
+`DocumentODT` projects ODF content.xml / styles.xml onto the model. `DocumentPages` interprets modern IWA object graphs. Pages layout canvases must not be forced into Word's page semantics. Positioned and unknown content retains source parts and raw representations. The basic writing milestone above is additive; layout and encryption remain outside scope.
 
 Pages detection inspects the first TSP.ArchiveInfo in Index/Document.iwa for object 1, type 10000 (TP.DocumentArchive). Shared iWork ZIP filenames alone do not identify Pages. Legacy iWork, Index.zip and folder packages are not supported.
 
@@ -105,7 +183,7 @@ Library diagnostics, CLI usage and public API documentation use English. Warning
 
 ## Subsequent format milestones
 
-Complete and verify Word reading first. Then add ODT (LibreOffice Writer) and Apple Pages reading, including format-specific semantics and original-part preservation. After the readers are complete, implement writing for every supported format, following SwiftSheets' codec, options, warning and preservation conventions. An unmeasured format or operation is never marked complete. Release tagging and publication remain a separate final decision.
+Word, ODT (LibreOffice Writer) and Apple Pages reading retain their format-specific semantics and original-part preservation contracts. The first writing milestone is the supported subset above, following SwiftSheets' codec, options and warning conventions; lossless editing and Markdown writing remain future work. An unmeasured format or operation is never marked complete. Release tagging and publication remain a separate final decision.
 
 Read body order, paragraphs, formatted runs, tabs, breaks and tables (nested tables, gridSpan, vMerge, widths, borders and cell properties). Frequent run / paragraph properties have typed fields; raw XML supplements uninterpreted properties. Resolve style inheritance and Word style toggles. Preserve numbering abstract definitions, instances and level overrides; paragraphs carry numbering IDs / levels, without computed display numbers.
 
@@ -186,7 +264,7 @@ Only reusable implementation, tests, synthetic fixtures, English documentation a
 
 Version 1.0 stabilizes the documented reading API under semantic versioning. Partial projections and raw-only features remain explicit in the support ledger; version 1.0 does not promise complete Office/ODF/Pages interpretation, writing or rendering. Public API changes after 1.0 follow semantic versioning, with additive improvements allowed in minor releases.
 
-The API reference is built with DocC from public compiler symbol graphs. All five library modules and the umbrella's convenience extensions are included. CI publishes only the generated documentation artifact to GitHub Pages. Build outputs and symbol graph source paths are not committed.
+The API reference is built with DocC from public compiler symbol graphs. All six library modules and the umbrella's convenience extensions are included. CI publishes only the generated documentation artifact to GitHub Pages. Build outputs and symbol graph source paths are not committed.
 
 An English Markdown API inventory is generated from those compiler graphs, with deterministic ordering and declarations rather than a manually maintained list. Executable examples are separate local Swift packages using the public products; their documented commands compile and run against synthetic inputs.
 
