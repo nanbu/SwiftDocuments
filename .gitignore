@@ -4,3 +4,6 @@
 *.xcodeproj/
 __pycache__/
 *.doccarchive/
+
+# 配布ファイル（DMG）は git に入れない — dl.nambu.dev から配る（Playbook ADR-034）
+*.dmg
